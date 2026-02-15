@@ -12,9 +12,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./src
 
     steps:
       - uses: actions/checkout@v4
@@ -23,24 +20,16 @@ jobs:
         with:
           node-version: 20
       
-      # 1. 安裝套件
+      # 因為 package.json 已經在根目錄，直接 install 即可
       - run: npm install
       
-      # 2. 嘗試建置
+      # 執行建置，Vite 會自動在根目錄產生 dist 資料夾
       - run: npm run build
       
-      # 3. 【除錯關鍵】列出所有檔案，檢查 dist 是否真的存在
-      - name: List files for debugging
-        run: |
-          echo "Current directory:"
-          pwd
-          echo "Listing all files:"
-          ls -R
-      
-      # 4. 上傳
+      # 👇 關鍵修正：路徑改回 'dist' (不再是 src/dist)
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: src/dist
+          path: dist
 
   deploy:
     environment:
