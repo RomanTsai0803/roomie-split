@@ -18,11 +18,26 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      
+      # 1. 安裝套件
       - run: npm install
+      
+      # 2. 嘗試建置
       - run: npm run build
+      
+      # 3. 【除錯關鍵】列出所有檔案，檢查 dist 是否真的存在
+      - name: List files for debugging
+        run: |
+          echo "Current directory:"
+          pwd
+          echo "Listing all files:"
+          ls -R
+      
+      # 4. 上傳
       - uses: actions/upload-pages-artifact@v3
         with:
           path: src/dist
