@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Trash2, Users, DollarSign, Calculator, Calendar, CheckCircle, Zap, Activity, Settings, RefreshCw, Save, AlertTriangle, Layers, X, History, FileText, Cloud, CloudOff } from 'lucide-react';
 
 // --- FIREBASE 設定區 ---
-// 請將您從 Firebase Console 複製的設定填入下方
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, 
@@ -60,7 +59,6 @@ const App = () => {
   // --- 資料同步核心 (Firebase / LocalStorage) ---
   useEffect(() => {
     if (!isFirebaseReady) {
-      // 本地模式：讀取 LocalStorage
       const savedExp = localStorage.getItem('dragon_den_expenses');
       const savedRoom = localStorage.getItem('dragon_den_names');
       const savedFixed = localStorage.getItem('dragon_den_fixed_config');
@@ -70,8 +68,6 @@ const App = () => {
       return;
     }
 
-    // 雲端模式：監聽 Firebase
-    // 1. 監聽支出
     const q = query(collection(db, "expenses"), orderBy("date", "desc"));
     const unsubExpenses = onSnapshot(q, (snapshot) => {
       const loadedExpenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -82,14 +78,12 @@ const App = () => {
       setDbStatus('error');
     });
 
-    // 2. 監聽設定 (室友名單 & 固定費用)
     const unsubSettings = onSnapshot(doc(db, "config", "main"), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         if (data.roommates) setRoommates(data.roommates);
         if (data.fixedConfig) setFixedConfig(data.fixedConfig);
       } else {
-        // 若雲端無設定，初始化它
         setDoc(doc(db, "config", "main"), {
           roommates: INITIAL_ROOMMATES,
           fixedConfig: INITIAL_FIXED_CONFIG
@@ -100,7 +94,6 @@ const App = () => {
     return () => { unsubExpenses(); unsubSettings(); };
   }, []);
 
-  // 本地模式備份
   useEffect(() => {
     if (!isFirebaseReady) {
       localStorage.setItem('dragon_den_expenses', JSON.stringify(expenses));
@@ -116,7 +109,7 @@ const App = () => {
   // --- 資料庫操作封裝 ---
   const addExpenseToDb = async (expenseData) => {
     if (isFirebaseReady) {
-      const { id, ...data } = expenseData; // 移除本地 id，讓 Firebase 自動產生
+      const { id, ...data } = expenseData;
       await addDoc(collection(db, "expenses"), data);
     } else {
       setExpenses([expenseData, ...expenses]);
@@ -250,7 +243,6 @@ const App = () => {
     const existing = expenses.filter(e => e.configId && e.date.startsWith(selectedMonth));
     if (existing.length > 0) {
       if (!window.confirm(`本月已匯入過，要更新金額嗎？(這會刪除舊紀錄並重新寫入)`)) return;
-      // 簡單策略：刪除舊的，寫入新的
       const idsToDelete = existing.map(e => e.id);
       const newItems = fixedConfig.map((cfg, idx) => ({
         id: (Date.now() + idx).toString(), configId: cfg.id, description: `${cfg.title} (固定)`, amount: Math.round(parseFloat(cfg.amount)), payerId: batchPayerId, forWho: cfg.forWho, date: `${selectedMonth}-01`
