@@ -130,7 +130,7 @@ const App = () => {
     }
   };
 
-  // --- 核心計算邏輯 ---
+  // --- 核心計算邏輯 (支援多人分擔 + 智慧進位) ---
   const stats = useMemo(() => {
     const monthlyExpenses = expenses.filter(e => e.date.startsWith(selectedMonth));
     const totalSpent = monthlyExpenses.reduce((sum, item) => sum + Math.round(parseFloat(item.amount)), 0);
@@ -249,7 +249,7 @@ const App = () => {
     await addExpenseToDb(expense);
     setNewExpense({ description: '', amount: '', payerId: '1', forWho: roommates.map(r=>r.id), date: selectedMonth + '-01' });
     alert('已新增');
-    setActiveTab('dashboard'); // 新增後跳回戰情
+    setActiveTab('dashboard'); 
   };
 
   const handleBatchImport = async () => {
@@ -268,7 +268,32 @@ const App = () => {
   const deleteExpense = async (id) => { if (window.confirm('刪除此筆？')) await deleteExpenseFromDb(id); };
   const deleteCurrentMonthData = async () => { if (window.confirm(`確定清空 ${selectedMonth} 所有資料？`)) { const ids = expenses.filter(e => e.date.startsWith(selectedMonth)).map(e => e.id); await batchOperationToDb(null, ids); }};
 
-  const updateFixedConfig = (id, field, value) => { setFixedConfig(fixedConfig.map(item => item.id === id ? { ...item, [field]: value } : item)); updateSettingsInDb(null, fixedConfig.map(item => item.id === id ? { ...item, [field]: value } : item)); };
+  // ✅ 核心修正：修改固定費用時，同步更新本月已存在的對應帳單
+  const updateFixedConfig = (id, field, value) => { 
+    // 1. 更新設定檔 State & DB
+    const nextConfig = fixedConfig.map(item => item.id === id ? { ...item, [field]: value } : item);
+    setFixedConfig(nextConfig); 
+    updateSettingsInDb(null, nextConfig); 
+
+    // 2. 檢查本月是否有這筆固定支出的紀錄，若有則同步更新
+    const targetExpense = expenses.find(e => e.configId === id && e.date.startsWith(selectedMonth));
+    if (targetExpense) {
+       const updateData = {};
+       // 根據修改的欄位對應更新 expense
+       if (field === 'title') updateData.description = `${value} (固定)`;
+       if (field === 'amount') updateData.amount = Math.round(parseFloat(value) || 0);
+       if (field === 'forWho') updateData.forWho = value;
+       
+       if (Object.keys(updateData).length > 0) {
+          if (isFirebaseReady) {
+             updateDoc(doc(db, "expenses", targetExpense.id), updateData);
+          } else {
+             setExpenses(prev => prev.map(e => e.id === targetExpense.id ? { ...e, ...updateData } : e));
+          }
+       }
+    }
+  };
+
   const addFixedConfig = () => { const newItem = { id: `f${Date.now()}`, title: '新費用', amount: 0, forWho: roommates.map(r=>r.id) }; setFixedConfig([...fixedConfig, newItem]); updateSettingsInDb(null, [...fixedConfig, newItem]); };
   const removeFixedConfig = (id) => { if (window.confirm('刪除設定？')) { const next = fixedConfig.filter(c => c.id !== id); setFixedConfig(next); updateSettingsInDb(null, next); }};
 
@@ -311,7 +336,7 @@ const App = () => {
         </div>
       </header>
 
-      {/* Floating Action Button (FAB) - 只在非新增頁面顯示 */}
+      {/* Floating Action Button (FAB) */}
       {activeTab !== 'add' && (
         <button 
           onClick={() => setActiveTab('add')}
