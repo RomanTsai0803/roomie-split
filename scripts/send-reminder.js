@@ -134,8 +134,7 @@ async function main() {
   console.log(`Taiwan date: ${taiwanNow.toISOString().slice(0, 10)}, day=${day}, is28th=${is28th}, isLastDay=${isLast}`);
 
   // 28 號或最後一天才發送，其他日期跳過
-  // TEMP: 強制發送測試，測試完後移除 false &&
-  if (false && !is28th && !isLast) {
+  if (!is28th && !isLast) {
     console.log("Not 28th or last day. Skipping.");
     process.exit(0);
   }
@@ -160,12 +159,11 @@ async function main() {
   // 發送訊息
   const messagesToSend = [];
 
-  // TEMP: 強制發送兩則測試，測試完後還原
-  if (true || is28th) {
+  if (is28th) {
     messagesToSend.push(buildMessage("房租 & 帳單提醒", liabilities));
   }
 
-  if (true || isLast) {
+  if (isLast) {
     messagesToSend.push(buildMessage("月底結算", liabilities));
   }
 
