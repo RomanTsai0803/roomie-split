@@ -160,11 +160,12 @@ async function main() {
   // 發送訊息
   const messagesToSend = [];
 
-  if (is28th) {
+  // TEMP: 強制發送兩則測試，測試完後還原
+  if (true || is28th) {
     messagesToSend.push(buildMessage("房租 & 帳單提醒", liabilities));
   }
 
-  if (isLast) {
+  if (true || isLast) {
     messagesToSend.push(buildMessage("月底結算", liabilities));
   }
 
