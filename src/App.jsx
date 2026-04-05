@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Users, DollarSign, Calculator, Calendar, CheckCircle, Zap, Activity, Settings, RefreshCw, Save, AlertTriangle, Layers, X, History, FileText, Cloud, CloudOff, CheckSquare, Square } from 'lucide-react';
+import { Plus, Trash2, DollarSign, Calculator, CheckCircle, Activity, Settings, AlertTriangle, X, History, FileText, Cloud, CloudOff, CheckSquare, Square, ArrowRight, Home, BarChart3 } from 'lucide-react';
 
 // --- FIREBASE 設定區 ---
 import { initializeApp } from "firebase/app";
-import { 
-  getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, 
-  onSnapshot, query, orderBy, writeBatch, setDoc 
+import {
+  getFirestore, collection, addDoc, deleteDoc, doc, updateDoc,
+  onSnapshot, query, orderBy, writeBatch, setDoc
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -18,7 +18,6 @@ const firebaseConfig = {
   measurementId: "G-0L3WSBNVLT"
 };
 
-// 初始化 Firebase
 let db;
 const isFirebaseReady = Object.keys(firebaseConfig).length > 0;
 if (isFirebaseReady) {
@@ -28,19 +27,23 @@ if (isFirebaseReady) {
 
 // ------------------------------------------------
 
-// 初始室友名單
+const MEMBER_THEMES = {
+  '1': { bg: 'bg-terracotta', bgLight: 'bg-terracotta-light', text: 'text-terracotta', ring: 'ring-terracotta/30', dot: 'bg-terracotta' },
+  '2': { bg: 'bg-sage', bgLight: 'bg-sage-light', text: 'text-sage', ring: 'ring-sage/30', dot: 'bg-sage' },
+  '3': { bg: 'bg-lavender', bgLight: 'bg-lavender-light', text: 'text-lavender', ring: 'ring-lavender/30', dot: 'bg-lavender' },
+};
+
 const INITIAL_ROOMMATES = [
-  { id: '1', name: '劉傑', color: 'bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.5)]' },
-  { id: '2', name: 'Aaron', color: 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' },
-  { id: '3', name: 'Roman', color: 'bg-violet-500 shadow-[0_0_10px_rgba(139,92,246,0.5)]' },
+  { id: '1', name: '劉傑', color: 'bg-terracotta' },
+  { id: '2', name: 'Aaron', color: 'bg-sage' },
+  { id: '3', name: 'Roman', color: 'bg-lavender' },
 ];
 
-// 預設固定費用設定
 const INITIAL_FIXED_CONFIG = [
   { id: 'f1', title: '劉傑房租', amount: 12600, forWho: ['1'] },
   { id: 'f2', title: 'Aaron房租', amount: 10200, forWho: ['2'] },
   { id: 'f3', title: 'Roman房租', amount: 9600, forWho: ['3'] },
-  { id: 'f4', title: '大樓管理費', amount: 737, forWho: ['1', '2', '3'] }, // 預設全體
+  { id: 'f4', title: '大樓管理費', amount: 737, forWho: ['1', '2', '3'] },
 ];
 
 const App = () => {
@@ -50,7 +53,7 @@ const App = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [dbStatus, setDbStatus] = useState(isFirebaseReady ? 'connecting' : 'local');
-  
+
   const [newExpense, setNewExpense] = useState({
     description: '', amount: '', payerId: '1', forWho: ['1', '2', '3'], date: new Date().toISOString().split('T')[0]
   });
@@ -96,8 +99,8 @@ const App = () => {
   }, [expenses, roommates, fixedConfig]);
 
   useEffect(() => {
-    setNewExpense(prev => ({ 
-      ...prev, 
+    setNewExpense(prev => ({
+      ...prev,
       date: `${selectedMonth}-01`,
       forWho: roommates.map(r => r.id)
     }));
@@ -105,7 +108,7 @@ const App = () => {
 
   // --- DB Operations ---
   const addExpenseToDb = async (data) => {
-    if (isFirebaseReady) { const { id, ...rest } = data; await addDoc(collection(db, "expenses"), rest); } 
+    if (isFirebaseReady) { const { id, ...rest } = data; await addDoc(collection(db, "expenses"), rest); }
     else setExpenses([data, ...expenses]);
   };
   const deleteExpenseFromDb = async (id) => {
@@ -130,7 +133,7 @@ const App = () => {
     }
   };
 
-  // --- 核心計算邏輯 (支援多人分擔 + 智慧進位) ---
+  // --- 核心計算邏輯 ---
   const stats = useMemo(() => {
     const monthlyExpenses = expenses.filter(e => e.date.startsWith(selectedMonth));
     const totalSpent = monthlyExpenses.reduce((sum, item) => sum + Math.round(parseFloat(item.amount)), 0);
@@ -162,15 +165,13 @@ const App = () => {
           let liability = 0;
           if (isPayerInvolved) {
             if (r.id === item.payerId) {
-              const othersCount = count - 1;
-              liability = amount - (splitAmount * othersCount);
+              liability = amount - (splitAmount * (count - 1));
             } else {
               liability = splitAmount;
             }
           } else {
             if (r.id === beneficiaries[0].id) {
-               const othersLiability = splitAmount * (count - 1);
-               liability = amount - othersLiability;
+               liability = amount - (splitAmount * (count - 1));
             } else {
                liability = splitAmount;
             }
@@ -196,7 +197,7 @@ const App = () => {
       const beneficiaries = getBeneficiaries(cfg.forWho, roommates);
       const count = beneficiaries.length;
       if(count > 0) {
-         const split = Math.ceil(amount / count); 
+         const split = Math.ceil(amount / count);
          beneficiaries.forEach(r => projectedFixed[r.id] += split);
       }
     });
@@ -216,32 +217,7 @@ const App = () => {
     return { monthlyExpenses, totalSpent, balances, transactions, hasImportedFixed, projectedFixed };
   }, [expenses, roommates, fixedConfig, selectedMonth]);
 
-  // --- UI Components ---
-  const MultiSelectUser = ({ selected, onChange }) => {
-    const toggle = (id) => {
-      if (selected.includes(id)) {
-        if (selected.length === 1) return;
-        onChange(selected.filter(uid => uid !== id));
-      } else {
-        onChange([...selected, id]);
-      }
-    };
-    const selectAll = () => onChange(roommates.map(r => r.id));
-
-    return (
-      <div className="flex flex-col gap-2">
-        <div className="flex gap-2 flex-wrap">
-          {roommates.map(r => (
-            <button key={r.id} type="button" onClick={() => toggle(r.id)} className={`flex-1 py-2 px-1 rounded text-xs font-bold transition-all border ${selected.includes(r.id) ? `${r.color.split(' ')[0]} text-white border-transparent shadow-md` : 'bg-slate-800 text-slate-500 border-slate-700'}`}>
-              <div className="flex items-center justify-center gap-1">{selected.includes(r.id) ? <CheckSquare size={12} /> : <Square size={12} />}{r.name}</div>
-            </button>
-          ))}
-        </div>
-        {selected.length < roommates.length && <button type="button" onClick={selectAll} className="text-[10px] text-cyan-500 self-end hover:underline">選取全體</button>}
-      </div>
-    );
-  };
-
+  // --- Handlers ---
   const handleAddExpense = async (e) => {
     e.preventDefault();
     if (!newExpense.description || !newExpense.amount) return;
@@ -249,14 +225,13 @@ const App = () => {
     await addExpenseToDb(expense);
     setNewExpense({ description: '', amount: '', payerId: '1', forWho: roommates.map(r=>r.id), date: selectedMonth + '-01' });
     alert('已新增');
-    setActiveTab('dashboard'); 
+    setActiveTab('dashboard');
   };
 
   const handleBatchImport = async () => {
     const existing = expenses.filter(e => e.configId && e.date.startsWith(selectedMonth));
     const actionText = existing.length > 0 ? "更新" : "匯入";
     if (!window.confirm(`確定要以 [${roommates.find(r => r.id === batchPayerId)?.name}] 為付款人，${actionText}固定支出嗎？`)) return;
-
     if (existing.length > 0) await batchOperationToDb(null, existing.map(e => e.id));
     const batchItems = fixedConfig.map((cfg, idx) => ({
       id: (Date.now() + idx).toString(), configId: cfg.id, description: `${cfg.title} (固定)`, amount: Math.round(parseFloat(cfg.amount)), payerId: batchPayerId, forWho: cfg.forWho, date: `${selectedMonth}-01`
@@ -268,22 +243,16 @@ const App = () => {
   const deleteExpense = async (id) => { if (window.confirm('刪除此筆？')) await deleteExpenseFromDb(id); };
   const deleteCurrentMonthData = async () => { if (window.confirm(`確定清空 ${selectedMonth} 所有資料？`)) { const ids = expenses.filter(e => e.date.startsWith(selectedMonth)).map(e => e.id); await batchOperationToDb(null, ids); }};
 
-  // ✅ 核心修正：修改固定費用時，同步更新本月已存在的對應帳單
-  const updateFixedConfig = (id, field, value) => { 
-    // 1. 更新設定檔 State & DB
+  const updateFixedConfig = (id, field, value) => {
     const nextConfig = fixedConfig.map(item => item.id === id ? { ...item, [field]: value } : item);
-    setFixedConfig(nextConfig); 
-    updateSettingsInDb(null, nextConfig); 
-
-    // 2. 檢查本月是否有這筆固定支出的紀錄，若有則同步更新
+    setFixedConfig(nextConfig);
+    updateSettingsInDb(null, nextConfig);
     const targetExpense = expenses.find(e => e.configId === id && e.date.startsWith(selectedMonth));
     if (targetExpense) {
        const updateData = {};
-       // 根據修改的欄位對應更新 expense
        if (field === 'title') updateData.description = `${value} (固定)`;
        if (field === 'amount') updateData.amount = Math.round(parseFloat(value) || 0);
        if (field === 'forWho') updateData.forWho = value;
-       
        if (Object.keys(updateData).length > 0) {
           if (isFirebaseReady) {
              updateDoc(doc(db, "expenses", targetExpense.id), updateData);
@@ -297,19 +266,75 @@ const App = () => {
   const addFixedConfig = () => { const newItem = { id: `f${Date.now()}`, title: '新費用', amount: 0, forWho: roommates.map(r=>r.id) }; setFixedConfig([...fixedConfig, newItem]); updateSettingsInDb(null, [...fixedConfig, newItem]); };
   const removeFixedConfig = (id) => { if (window.confirm('刪除設定？')) { const next = fixedConfig.filter(c => c.id !== id); setFixedConfig(next); updateSettingsInDb(null, next); }};
 
+  const getTheme = (id) => MEMBER_THEMES[id] || MEMBER_THEMES['1'];
+
+  // --- UI Components ---
+  const MultiSelectUser = ({ selected, onChange }) => {
+    const toggle = (id) => {
+      if (selected.includes(id)) {
+        if (selected.length === 1) return;
+        onChange(selected.filter(uid => uid !== id));
+      } else {
+        onChange([...selected, id]);
+      }
+    };
+    const selectAll = () => onChange(roommates.map(r => r.id));
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {roommates.map(r => {
+            const theme = getTheme(r.id);
+            const isSelected = selected.includes(r.id);
+            return (
+              <button key={r.id} type="button" onClick={() => toggle(r.id)}
+                className={`flex-1 py-2.5 px-2 rounded-xl text-xs font-semibold transition-all border-2 ${
+                  isSelected
+                    ? `${theme.bg} text-white border-transparent shadow-md`
+                    : 'bg-warm-50 text-warm-500 border-warm-200 hover:border-warm-300'
+                }`}>
+                <div className="flex items-center justify-center gap-1.5">
+                  {isSelected ? <CheckSquare size={13} /> : <Square size={13} />}
+                  {r.name}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        {selected.length < roommates.length && (
+          <button type="button" onClick={selectAll} className="text-[11px] text-terracotta font-medium self-end hover:underline">
+            選取全體
+          </button>
+        )}
+      </div>
+    );
+  };
+
   const AmountWithDetail = ({ amount, details, colorClass, title }) => {
     const [showDetail, setShowDetail] = useState(false);
-    if (!details?.length) return <div className={`text-xs font-mono text-center ${colorClass}`}>${amount.toLocaleString()}</div>;
+    if (!details?.length) return <div className={`text-sm font-medium font-display text-center ${colorClass}`}>${amount.toLocaleString()}</div>;
     return (
       <>
-        <div onClick={() => setShowDetail(true)} className={`text-xs font-mono text-center border-b border-dashed border-slate-600 active:text-cyan-400 cursor-pointer ${colorClass}`}>${amount.toLocaleString()}</div>
+        <div onClick={() => setShowDetail(true)} className={`text-sm font-medium font-display text-center border-b border-dashed border-warm-300 cursor-pointer hover:text-terracotta transition-colors ${colorClass}`}>
+          ${amount.toLocaleString()}
+        </div>
         {showDetail && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowDetail(false)}>
-            <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-xs overflow-hidden" onClick={e => e.stopPropagation()}>
-              <div className="bg-slate-800 px-4 py-3 flex justify-between items-center"><h4 className="text-sm font-bold text-white flex gap-2"><FileText size={14}/>{title}</h4><button onClick={() => setShowDetail(false)}><X size={18} className="text-slate-400"/></button></div>
-              <div className="p-4 max-h-60 overflow-y-auto">
-                {details.map((d, i) => <div key={i} className="flex justify-between py-2 border-b border-slate-800"><span className="text-xs text-slate-300">{d.desc}</span><span className="text-sm font-mono text-cyan-400">${d.amt}</span></div>)}
-                <div className="mt-3 pt-3 border-t border-slate-700 flex justify-between font-bold"><span className="text-xs text-slate-400">總計</span><span className="text-white">${amount.toLocaleString()}</span></div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-warm-900/30 backdrop-blur-sm" onClick={() => setShowDetail(false)}>
+            <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-fade-in-up" onClick={e => e.stopPropagation()}>
+              <div className="bg-cream px-5 py-4 flex justify-between items-center border-b border-warm-200">
+                <h4 className="text-sm font-bold text-warm-800 flex items-center gap-2"><FileText size={15} className="text-terracotta" />{title}</h4>
+                <button onClick={() => setShowDetail(false)} className="text-warm-400 hover:text-warm-600 transition-colors"><X size={18} /></button>
+              </div>
+              <div className="p-5 max-h-60 overflow-y-auto">
+                {details.map((d, i) => (
+                  <div key={i} className="flex justify-between py-3 border-b border-warm-100 last:border-0">
+                    <span className="text-sm text-warm-600">{d.desc}</span>
+                    <span className="text-sm font-display font-semibold text-warm-800">${d.amt.toLocaleString()}</span>
+                  </div>
+                ))}
+                <div className="mt-4 pt-4 border-t-2 border-warm-200 flex justify-between items-center">
+                  <span className="text-xs font-semibold text-warm-400 uppercase tracking-wider">Total</span>
+                  <span className="font-display text-lg font-bold text-terracotta">${amount.toLocaleString()}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -319,136 +344,342 @@ const App = () => {
   };
 
   const TabButton = ({ id, label, icon: Icon }) => (
-    <button onClick={() => setActiveTab(id)} className={`flex flex-col items-center justify-center w-full py-3 relative ${activeTab === id ? 'text-cyan-400' : 'text-slate-600'}`}>
-      <div className={`absolute top-0 w-12 h-1 bg-cyan-500 rounded-b-full transition-all ${activeTab === id ? 'opacity-100' : 'opacity-0'}`}></div>
-      <Icon size={24} className="mb-1" /><span className="text-[12px] font-bold">{label}</span>
+    <button onClick={() => setActiveTab(id)}
+      className={`flex flex-col items-center justify-center py-3 px-4 relative transition-all ${
+        activeTab === id ? 'text-terracotta' : 'text-warm-400 hover:text-warm-600'
+      }`}>
+      {activeTab === id && <div className="absolute top-0 w-8 h-[3px] bg-terracotta rounded-b-full" />}
+      <Icon size={22} className="mb-1" strokeWidth={activeTab === id ? 2.5 : 1.8} />
+      <span className="text-[11px] font-semibold tracking-wide">{label}</span>
     </button>
   );
 
+  // --- Card wrapper ---
+  const Card = ({ children, className = '' }) => (
+    <div className={`bg-white rounded-2xl p-5 shadow-[var(--card-shadow)] border border-warm-100 ${className}`}>
+      {children}
+    </div>
+  );
+
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-slate-200 font-sans max-w-md mx-auto relative">
-      <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-cyan-500 via-purple-500 to-cyan-500 z-50"></div>
-      <header className="bg-slate-900/80 backdrop-blur-md px-6 py-4 border-b border-slate-800 z-10">
-        <h1 className="text-xl font-black text-white italic flex items-center gap-2"><Activity className="text-cyan-400"/>龍品小窩</h1>
-        <p className="text-[10px] text-slate-500 font-mono tracking-widest flex items-center gap-1">GODDAMN MONTHLY EXPENSES {dbStatus==='connected'?<span className="text-emerald-500 flex gap-1"><Cloud size={10}/></span>:<span className="text-slate-600 flex gap-1"><CloudOff size={10}/></span>}</p>
-        <div className="mt-2 flex items-center gap-2 bg-black/30 p-1.5 rounded-lg border border-slate-800/50">
-           <History size={16} className="text-cyan-500 ml-2" /><input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent text-white font-mono font-bold text-sm flex-1" />
+    <div className="min-h-screen bg-cream">
+      {/* Desktop sidebar / Mobile header */}
+      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-warm-200">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-terracotta flex items-center justify-center">
+                <Home size={18} className="text-white" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-warm-800 tracking-tight">龍品小窩</h1>
+                <div className="flex items-center gap-1.5 -mt-0.5">
+                  {dbStatus === 'connected'
+                    ? <span className="flex items-center gap-1 text-[10px] text-sage font-medium"><Cloud size={10} />Synced</span>
+                    : <span className="flex items-center gap-1 text-[10px] text-warm-400 font-medium"><CloudOff size={10} />Local</span>
+                  }
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-cream rounded-xl px-3 py-2 border border-warm-200">
+              <History size={14} className="text-warm-400" />
+              <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}
+                className="bg-transparent text-warm-800 font-semibold text-sm outline-none w-32" />
+            </div>
+          </div>
         </div>
       </header>
 
-      {/* Floating Action Button (FAB) */}
+      {/* FAB */}
       {activeTab !== 'add' && (
-        <button 
-          onClick={() => setActiveTab('add')}
-          className="fixed bottom-24 right-6 bg-cyan-500 text-white p-4 rounded-full shadow-[0_0_20px_rgba(6,182,212,0.6)] hover:scale-110 active:scale-95 transition-all z-50 border-2 border-white/20"
-        >
-          <Plus size={28} strokeWidth={3} />
+        <button onClick={() => setActiveTab('add')}
+          className="fixed bottom-24 right-4 sm:bottom-8 sm:right-8 lg:right-[calc(50%-600px+2rem)] bg-terracotta text-white p-4 rounded-2xl shadow-lg shadow-terracotta/30 hover:shadow-xl hover:shadow-terracotta/40 hover:scale-105 active:scale-95 transition-all z-40">
+          <Plus size={24} strokeWidth={2.5} />
         </button>
       )}
 
-      <main className="flex-1 overflow-y-auto p-5 scrollbar-hide">
+      {/* Main content */}
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 sm:pb-6">
         {activeTab === 'dashboard' && (
-          <div className="space-y-6">
-            {!isFirebaseReady && <div className="bg-amber-900/20 border border-amber-500/30 p-3 rounded text-amber-500 text-xs text-center">⚠️ 單機模式</div>}
-            <div className={`rounded-lg p-4 border ${stats.hasImportedFixed ? 'bg-slate-900 border-emerald-500/30' : 'bg-slate-900 border-amber-500/50'}`}>
+          <div className="space-y-5 animate-fade-in-up">
+            {!isFirebaseReady && (
+              <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-amber-700 text-xs text-center font-medium">
+                單機模式：請設定 Firebase 以啟用多人同步
+              </div>
+            )}
+
+            {/* Fixed expenses status */}
+            <Card>
               <div className="flex justify-between items-center mb-3">
-                 <h3 className={`font-bold text-xs uppercase flex gap-2 ${stats.hasImportedFixed ? 'text-emerald-400' : 'text-amber-500'}`}>{stats.hasImportedFixed ? <CheckCircle size={14}/> : <AlertTriangle size={14}/>} 固定費用</h3>
-                 <span className={`text-[10px] px-2 py-0.5 rounded border ${stats.hasImportedFixed ? 'text-emerald-400 border-emerald-500/30' : 'text-amber-500 border-amber-500/30'}`}>{stats.hasImportedFixed ? '已同步' : '未匯入'}</span>
+                <h3 className={`font-bold text-sm flex items-center gap-2 ${stats.hasImportedFixed ? 'text-sage' : 'text-amber-600'}`}>
+                  {stats.hasImportedFixed ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
+                  固定費用
+                </h3>
+                <span className={`text-[11px] px-2.5 py-1 rounded-full font-semibold ${
+                  stats.hasImportedFixed
+                    ? 'text-sage bg-sage-light/60'
+                    : 'text-amber-700 bg-amber-100'
+                }`}>
+                  {stats.hasImportedFixed ? '已同步' : '未匯入'}
+                </span>
               </div>
               {!stats.hasImportedFixed && (
-                <div className="flex gap-2 items-center bg-black/20 p-2 rounded border border-slate-700">
-                  <span className="text-[10px]">付款人:</span>
-                  <select value={batchPayerId} onChange={(e) => setBatchPayerId(e.target.value)} className="bg-transparent text-white text-xs flex-1 font-bold outline-none">{roommates.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
-                  <button onClick={handleBatchImport} className="bg-amber-600 text-white px-3 py-1 rounded text-[10px] font-bold">匯入</button>
+                <div className="flex gap-2 items-center bg-cream rounded-xl p-3 border border-warm-200">
+                  <span className="text-xs text-warm-500 font-medium">付款人</span>
+                  <select value={batchPayerId} onChange={(e) => setBatchPayerId(e.target.value)}
+                    className="bg-transparent text-warm-800 text-sm flex-1 font-bold outline-none">
+                    {roommates.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                  <button onClick={handleBatchImport} className="bg-terracotta text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-terracotta-dark transition-colors">
+                    匯入
+                  </button>
                 </div>
               )}
-            </div>
-            <div className="bg-slate-900 border border-slate-700 rounded-lg p-4 shadow-lg">
-               <h3 className="font-bold text-cyan-500 text-xs uppercase mb-4 flex gap-2"><Layers size={14}/> 本月應付詳情 (點金額看明細)</h3>
-               <div className="space-y-3">
-                  <div className="grid grid-cols-4 gap-2 text-[10px] text-slate-500 border-b border-slate-800 pb-2 text-center"><div className="text-left pl-2">Member</div><div>Fixed</div><div>Var</div><div>Total</div></div>
-                  {stats.balances.map(p => (
-                    <div key={p.id} className="grid grid-cols-4 gap-2 items-center p-2 rounded bg-black/20">
-                       <div className="flex items-center gap-2 overflow-hidden"><div className={`w-1.5 h-6 rounded-sm flex-shrink-0 ${p.color}`}></div><span className="text-xs font-bold truncate">{p.name}</span></div>
-                       <AmountWithDetail amount={stats.hasImportedFixed ? p.fixedLiability : stats.projectedFixed[p.id]} details={p.breakdown.fixed} title={`${p.name}固定`} colorClass={stats.hasImportedFixed ? 'text-slate-300' : 'text-amber-500/70 italic'} />
-                       <AmountWithDetail amount={p.variableLiability} details={p.breakdown.variable} title={`${p.name}變動`} colorClass="text-slate-300" />
-                       <div className="text-sm font-black font-mono text-cyan-400 text-center">${( (stats.hasImportedFixed ? p.fixedLiability : stats.projectedFixed[p.id]) + p.variableLiability).toLocaleString()}</div>
+            </Card>
+
+            {/* Responsive grid: side by side on desktop */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Member breakdown */}
+              <Card>
+                <h3 className="font-bold text-warm-800 text-sm mb-4 flex items-center gap-2">
+                  <BarChart3 size={16} className="text-terracotta" />
+                  本月應付詳情
+                  <span className="text-[10px] text-warm-400 font-normal ml-1">點金額看明細</span>
+                </h3>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-4 gap-2 text-[11px] text-warm-400 font-semibold uppercase tracking-wider border-b border-warm-100 pb-2">
+                    <div className="pl-1">成員</div>
+                    <div className="text-center">固定</div>
+                    <div className="text-center">變動</div>
+                    <div className="text-center">合計</div>
+                  </div>
+                  {stats.balances.map((p, idx) => {
+                    const theme = getTheme(p.id);
+                    return (
+                      <div key={p.id} className={`grid grid-cols-4 gap-2 items-center p-3 rounded-xl bg-cream/60 hover:bg-cream transition-colors animate-fade-in-up animate-delay-${idx + 1}`}>
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <div className={`w-2 h-7 rounded-full flex-shrink-0 ${theme.dot}`} />
+                          <span className="text-sm font-bold text-warm-800 truncate">{p.name}</span>
+                        </div>
+                        <AmountWithDetail
+                          amount={stats.hasImportedFixed ? p.fixedLiability : stats.projectedFixed[p.id]}
+                          details={p.breakdown.fixed}
+                          title={`${p.name} 固定費用`}
+                          colorClass={stats.hasImportedFixed ? 'text-warm-600' : 'text-amber-500 italic'}
+                        />
+                        <AmountWithDetail amount={p.variableLiability} details={p.breakdown.variable} title={`${p.name} 變動費用`} colorClass="text-warm-600" />
+                        <div className="text-base font-bold font-display text-terracotta text-center">
+                          ${((stats.hasImportedFixed ? p.fixedLiability : stats.projectedFixed[p.id]) + p.variableLiability).toLocaleString()}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+
+              {/* Total + settlements */}
+              <Card>
+                <div className="flex justify-between items-start mb-5">
+                  <div>
+                    <h2 className="text-xs font-semibold text-warm-400 uppercase tracking-wider mb-1">
+                      總流水 {selectedMonth}
+                    </h2>
+                    <div className="text-4xl font-display font-bold text-warm-800 tracking-tight">
+                      ${stats.totalSpent.toLocaleString()}
                     </div>
-                  ))}
-               </div>
-            </div>
-            <div className="bg-slate-900 border border-slate-700/50 rounded-lg p-5 relative overflow-hidden">
-                <div className="flex justify-between items-start mb-6"><div><h2 className="text-xs font-mono text-cyan-500 uppercase">總流水 ({selectedMonth})</h2><div className="text-3xl font-black text-white">${stats.totalSpent.toLocaleString()}</div></div><Calculator className="text-slate-700" size={32}/></div>
-                <div className="h-px bg-slate-700/50 mb-3"></div>
-                {stats.transactions.length === 0 ? <div className="flex gap-3 py-2 text-emerald-400"><CheckCircle size={20}/><span className="font-bold">帳務平衡</span></div> : 
-                  <div className="space-y-3">{stats.transactions.map((t, i) => <div key={i} className="flex justify-between bg-black/30 p-3 rounded border border-white/5"><div className="flex gap-2 text-sm"><span className="font-bold text-cyan-400">{t.from}</span><span className="text-slate-500">&gt;&gt;</span><span className="font-bold text-white">{t.to}</span></div><div className="font-mono font-bold text-emerald-400">${t.amount}</div></div>)}</div>}
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-cream flex items-center justify-center">
+                    <Calculator className="text-warm-300" size={24} />
+                  </div>
+                </div>
+                <div className="h-px bg-warm-100 mb-4" />
+                {stats.transactions.length === 0 ? (
+                  <div className="flex items-center gap-3 py-3 px-4 bg-sage-light/30 rounded-xl">
+                    <CheckCircle size={20} className="text-sage" />
+                    <span className="font-bold text-sage text-sm">帳務平衡</span>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-semibold text-warm-400 uppercase tracking-wider mb-2">結算轉帳</h3>
+                    {stats.transactions.map((t, i) => (
+                      <div key={i} className="flex justify-between items-center bg-cream rounded-xl p-4 border border-warm-100">
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="font-bold text-terracotta">{t.from}</span>
+                          <ArrowRight size={14} className="text-warm-300" />
+                          <span className="font-bold text-warm-800">{t.to}</span>
+                        </div>
+                        <div className="font-display font-bold text-sage text-lg">${t.amount}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
             </div>
           </div>
         )}
 
         {activeTab === 'add' && (
-          <form onSubmit={handleAddExpense} className="bg-slate-900 rounded-lg p-6 space-y-6 border border-slate-800">
-             <div className="flex justify-between items-center mb-2"><h2 className="text-xl font-black text-white">手動輸入款項</h2><button type="button" onClick={()=>setActiveTab('dashboard')} className="text-slate-500"><X/></button></div>
-             <div className="space-y-4">
-               <div><label className="text-[10px] font-bold text-cyan-500 block mb-1">日期</label><input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-full bg-black/40 border border-slate-700 rounded p-3 text-white text-sm" /></div>
-               <div><label className="text-[10px] font-bold text-cyan-500 block mb-1">金額</label><div className="relative"><DollarSign className="absolute left-3 top-3 text-slate-500" size={20}/><input type="number" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: e.target.value})} placeholder="0" className="w-full bg-black/40 border border-slate-700 rounded p-3 pl-10 text-white text-xl font-bold" /></div></div>
-               <div><label className="text-[10px] font-bold text-cyan-500 block mb-1">項目</label><input type="text" value={newExpense.description} onChange={e => setNewExpense({...newExpense, description: e.target.value})} placeholder="例如：全聯採購..." className="w-full bg-black/40 border border-slate-700 rounded p-3 text-white" /></div>
-               <div><label className="text-[10px] font-bold text-cyan-500 block mb-1">誰先付的?</label><select value={newExpense.payerId} onChange={e => setNewExpense({...newExpense, payerId: e.target.value})} className="w-full bg-black/40 border border-slate-700 rounded p-3 text-white text-sm">{roommates.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></div>
-               <div><label className="text-[10px] font-bold text-cyan-500 block mb-1">分擔對象</label>
-                 <MultiSelectUser selected={Array.isArray(newExpense.forWho) ? newExpense.forWho : [newExpense.forWho]} onChange={val => setNewExpense({...newExpense, forWho: val})} />
-               </div>
-             </div>
-             <button type="submit" className="w-full bg-cyan-600 text-white font-bold py-4 rounded flex justify-center gap-2"><Plus size={18} strokeWidth={3}/> 確認新增</button>
-          </form>
+          <div className="max-w-lg mx-auto animate-fade-in-up">
+            <Card>
+              <form onSubmit={handleAddExpense} className="space-y-5">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-bold text-warm-800">新增款項</h2>
+                  <button type="button" onClick={() => setActiveTab('dashboard')} className="text-warm-400 hover:text-warm-600 transition-colors">
+                    <X size={22} />
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-semibold text-warm-500 uppercase tracking-wider block mb-1.5">日期</label>
+                    <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})}
+                      className="w-full bg-cream border border-warm-200 rounded-xl p-3 text-warm-800 text-sm outline-none focus:border-terracotta focus:ring-2 focus:ring-terracotta/10 transition-all" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-warm-500 uppercase tracking-wider block mb-1.5">金額</label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-3.5 text-warm-300" size={18} />
+                      <input type="number" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: e.target.value})} placeholder="0"
+                        className="w-full bg-cream border border-warm-200 rounded-xl p-3 pl-10 text-warm-800 text-xl font-display font-bold outline-none focus:border-terracotta focus:ring-2 focus:ring-terracotta/10 transition-all" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-warm-500 uppercase tracking-wider block mb-1.5">項目</label>
+                    <input type="text" value={newExpense.description} onChange={e => setNewExpense({...newExpense, description: e.target.value})} placeholder="例如：全聯採購..."
+                      className="w-full bg-cream border border-warm-200 rounded-xl p-3 text-warm-800 text-sm outline-none focus:border-terracotta focus:ring-2 focus:ring-terracotta/10 transition-all placeholder:text-warm-300" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-semibold text-warm-500 uppercase tracking-wider block mb-1.5">誰先付的?</label>
+                      <select value={newExpense.payerId} onChange={e => setNewExpense({...newExpense, payerId: e.target.value})}
+                        className="w-full bg-cream border border-warm-200 rounded-xl p-3 text-warm-800 text-sm outline-none focus:border-terracotta transition-all">
+                        {roommates.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-warm-500 uppercase tracking-wider block mb-1.5">分擔對象</label>
+                      <MultiSelectUser selected={Array.isArray(newExpense.forWho) ? newExpense.forWho : [newExpense.forWho]} onChange={val => setNewExpense({...newExpense, forWho: val})} />
+                    </div>
+                  </div>
+                </div>
+                <button type="submit" className="w-full bg-terracotta text-white font-bold py-4 rounded-xl flex justify-center items-center gap-2 hover:bg-terracotta-dark active:scale-[0.98] transition-all shadow-md shadow-terracotta/20">
+                  <Plus size={18} strokeWidth={2.5} /> 確認新增
+                </button>
+              </form>
+            </Card>
+          </div>
         )}
 
         {activeTab === 'expenses' && (
-           <div className="space-y-3">
-             <div className="flex justify-between items-center"><h2 className="text-xl font-black text-white">{selectedMonth} 紀錄</h2><span className="text-xs bg-cyan-900/20 text-cyan-500 px-2 py-1 rounded">{stats.monthlyExpenses.length} 筆</span></div>
-             {stats.monthlyExpenses.map(item => (
-               <div key={item.id} className="bg-slate-900 p-4 rounded border border-slate-800 flex justify-between items-center">
-                 <div className="flex gap-3 items-center">
-                   <div className={`w-1 h-10 rounded-full ${roommates.find(r => r.id === item.payerId)?.color}`}></div>
-                   <div><div className="font-bold text-white text-sm">{item.description}</div><div className="text-[10px] text-slate-500">{item.date} • {roommates.find(r => r.id === item.payerId)?.name} 付</div></div>
-                 </div>
-                 <div className="flex gap-3 items-center"><span className="font-bold text-lg text-emerald-400">${item.amount}</span><button onClick={() => deleteExpense(item.id)} className="text-slate-600 hover:text-red-500"><Trash2 size={16}/></button></div>
-               </div>
-             ))}
-           </div>
+          <div className="max-w-2xl mx-auto space-y-4 animate-fade-in-up">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold text-warm-800">{selectedMonth} 紀錄</h2>
+              <span className="text-xs bg-terracotta-light/60 text-terracotta font-semibold px-3 py-1.5 rounded-full">
+                {stats.monthlyExpenses.length} 筆
+              </span>
+            </div>
+            {stats.monthlyExpenses.length === 0 && (
+              <Card className="text-center py-12">
+                <p className="text-warm-400 text-sm">本月尚無紀錄</p>
+              </Card>
+            )}
+            {stats.monthlyExpenses.map((item, idx) => {
+              const theme = getTheme(item.payerId);
+              return (
+                <Card key={item.id} className={`flex justify-between items-center animate-fade-in-up animate-delay-${Math.min(idx + 1, 3)}`}>
+                  <div className="flex gap-3 items-center">
+                    <div className={`w-1.5 h-10 rounded-full ${theme.dot}`} />
+                    <div>
+                      <div className="font-semibold text-warm-800 text-sm">{item.description}</div>
+                      <div className="text-xs text-warm-400 mt-0.5">
+                        {item.date} &middot; {roommates.find(r => r.id === item.payerId)?.name} 付
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 items-center">
+                    <span className="font-display font-bold text-lg text-warm-800">${item.amount.toLocaleString()}</span>
+                    <button onClick={() => deleteExpense(item.id)} className="text-warm-300 hover:text-red-400 transition-colors p-1">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
         )}
 
         {activeTab === 'settings' && (
-          <div className="space-y-6">
-            <div className="bg-slate-900 rounded-lg p-5 border border-slate-800">
-               <h3 className="font-bold text-cyan-500 text-xs mb-4">固定費用設定</h3>
-               {fixedConfig.map(item => (
-                 <div key={item.id} className="flex flex-col gap-2 p-3 bg-black/20 rounded border border-slate-800 mb-2 relative group">
-                   <button onClick={() => removeFixedConfig(item.id)} className="absolute top-2 right-2 text-slate-600 hover:text-red-500"><X size={14}/></button>
-                   <div className="flex gap-2"><input value={item.title} onChange={e => updateFixedConfig(item.id, 'title', e.target.value)} className="bg-transparent text-sm font-bold text-slate-300 outline-none flex-1" placeholder="費用名稱" /><input type="number" value={item.amount} onChange={e => updateFixedConfig(item.id, 'amount', e.target.value)} className="w-20 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none" /></div>
-                   <div className="pt-2 border-t border-slate-700/50">
-                      <span className="text-[10px] text-slate-500 block mb-1">分擔人:</span>
+          <div className="max-w-2xl mx-auto space-y-5 animate-fade-in-up">
+            <Card>
+              <h3 className="font-bold text-warm-800 text-sm mb-4 flex items-center gap-2">
+                <Settings size={16} className="text-terracotta" />
+                固定費用設定
+              </h3>
+              <div className="space-y-3">
+                {fixedConfig.map(item => (
+                  <div key={item.id} className="flex flex-col gap-3 p-4 bg-cream rounded-xl border border-warm-100 relative group">
+                    <button onClick={() => removeFixedConfig(item.id)} className="absolute top-3 right-3 text-warm-300 hover:text-red-400 transition-colors">
+                      <X size={15} />
+                    </button>
+                    <div className="flex gap-3 items-center pr-6">
+                      <input value={item.title} onChange={e => updateFixedConfig(item.id, 'title', e.target.value)}
+                        className="bg-transparent text-sm font-semibold text-warm-800 outline-none flex-1 placeholder:text-warm-300" placeholder="費用名稱" />
+                      <div className="flex items-center bg-white rounded-lg border border-warm-200 px-2">
+                        <span className="text-warm-400 text-sm">$</span>
+                        <input type="number" value={item.amount} onChange={e => updateFixedConfig(item.id, 'amount', e.target.value)}
+                          className="w-20 bg-transparent py-1.5 px-1 text-warm-800 text-sm font-display font-semibold outline-none" />
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-warm-200/60">
+                      <span className="text-[11px] text-warm-400 font-semibold uppercase tracking-wider block mb-1.5">分擔人</span>
                       <MultiSelectUser selected={Array.isArray(item.forWho) ? item.forWho : [item.forWho]} onChange={val => updateFixedConfig(item.id, 'forWho', val)} />
-                   </div>
-                 </div>
-               ))}
-               <button onClick={addFixedConfig} className="w-full py-2 bg-slate-800 text-slate-400 text-xs rounded border border-dashed border-slate-600 mt-2">+ 新增項目</button>
-            </div>
-            <div className="bg-slate-900 rounded-lg p-5 border border-slate-800">
-               <h3 className="font-bold text-cyan-500 text-xs mb-4">資料管理 ({selectedMonth})</h3>
-               <button onClick={deleteCurrentMonthData} className="w-full flex justify-center gap-2 text-rose-500 bg-rose-950/20 border border-rose-900/50 py-3 rounded text-xs font-bold"><Trash2 size={16}/> 刪除本月資料</button>
-            </div>
-             <div className="bg-slate-900 rounded-lg p-5 border border-slate-800">
-               <h3 className="font-bold text-cyan-500 text-xs mb-4">成員名單</h3>
-               {roommates.map((r, idx) => (
-                 <div key={r.id} className="flex gap-3 mb-2"><div className={`w-2 h-8 rounded ${r.color}`}></div><input value={r.name} onChange={e => { const newR = [...roommates]; newR[idx].name = e.target.value; updateSettingsInDb(newR, null); }} className="flex-1 bg-black/40 border border-slate-700 rounded px-3 py-2 text-white text-sm"/></div>
-               ))}
-            </div>
+                    </div>
+                  </div>
+                ))}
+                <button onClick={addFixedConfig} className="w-full py-3 bg-white text-warm-400 text-sm font-semibold rounded-xl border-2 border-dashed border-warm-200 hover:border-terracotta hover:text-terracotta transition-all">
+                  + 新增項目
+                </button>
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="font-bold text-warm-800 text-sm mb-4">成員名單</h3>
+              <div className="space-y-2">
+                {roommates.map((r, idx) => {
+                  const theme = getTheme(r.id);
+                  return (
+                    <div key={r.id} className="flex gap-3 items-center">
+                      <div className={`w-3 h-8 rounded-full ${theme.dot}`} />
+                      <input value={r.name} onChange={e => { const newR = [...roommates]; newR[idx].name = e.target.value; updateSettingsInDb(newR, null); }}
+                        className="flex-1 bg-cream border border-warm-200 rounded-xl px-3 py-2.5 text-warm-800 text-sm font-medium outline-none focus:border-terracotta transition-all" />
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+
+            <Card className="border-red-100">
+              <h3 className="font-bold text-warm-800 text-sm mb-4">資料管理 ({selectedMonth})</h3>
+              <button onClick={deleteCurrentMonthData} className="w-full flex justify-center items-center gap-2 text-red-500 bg-red-50 border border-red-200 py-3 rounded-xl text-sm font-semibold hover:bg-red-100 transition-colors">
+                <Trash2 size={16} /> 刪除本月所有資料
+              </button>
+            </Card>
           </div>
         )}
       </main>
-      <nav className="bg-slate-900 border-t border-slate-800 px-6 pb-safe pt-2">
-        <div className="grid grid-cols-3 gap-1">
-          <TabButton id="dashboard" label="戰情" icon={Activity} />
+
+      {/* Bottom nav - mobile only, desktop uses sidebar-like top nav */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-warm-200 sm:hidden z-30">
+        <div className="flex justify-around px-2 pb-safe">
+          <TabButton id="dashboard" label="總覽" icon={Activity} />
+          <TabButton id="expenses" label="紀錄" icon={DollarSign} />
+          <TabButton id="settings" label="設定" icon={Settings} />
+        </div>
+      </nav>
+
+      {/* Desktop nav */}
+      <nav className="hidden sm:block fixed bottom-6 left-1/2 -translate-x-1/2 z-30">
+        <div className="flex gap-1 bg-white rounded-2xl shadow-lg shadow-warm-800/10 border border-warm-200 px-2 py-1">
+          <TabButton id="dashboard" label="總覽" icon={Activity} />
           <TabButton id="expenses" label="紀錄" icon={DollarSign} />
           <TabButton id="settings" label="設定" icon={Settings} />
         </div>
