@@ -1,0 +1,29 @@
+name: Monthly LINE Reminder
+
+on:
+  schedule:
+    # 每月 28-31 號，UTC 12:00 = 台灣時間 20:00
+    - cron: "0 12 28-31 * *"
+  # 允許手動觸發（測試用）
+  workflow_dispatch:
+
+jobs:
+  send-reminder:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install script dependencies
+        run: cd scripts && npm install
+
+      - name: Run reminder script
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node scripts/send-reminder.js
