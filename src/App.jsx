@@ -399,7 +399,7 @@ const App = () => {
       )}
 
       {/* Main content */}
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 sm:pb-6">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-32 sm:pb-24">
         {activeTab === 'dashboard' && (
           <div className="space-y-5 animate-fade-in-up">
             {!isFirebaseReady && (
@@ -532,26 +532,26 @@ const App = () => {
                   <div>
                     <label className="text-xs font-semibold text-warm-500 uppercase tracking-wider block mb-1.5">日期</label>
                     <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})}
-                      className="w-full bg-cream border border-warm-200 rounded-xl p-3 text-warm-800 text-sm outline-none focus:border-terracotta focus:ring-2 focus:ring-terracotta/10 transition-all" />
+                      className="w-full bg-cream border border-warm-200 rounded-xl p-3 text-warm-800 text-base outline-none focus:border-terracotta focus:ring-2 focus:ring-terracotta/10 transition-all" />
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-warm-500 uppercase tracking-wider block mb-1.5">金額</label>
                     <div className="relative">
                       <DollarSign className="absolute left-3 top-3.5 text-warm-300" size={18} />
-                      <input type="number" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: e.target.value})} placeholder="0"
+                      <input type="number" inputMode="numeric" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: e.target.value})} placeholder="0"
                         className="w-full bg-cream border border-warm-200 rounded-xl p-3 pl-10 text-warm-800 text-xl font-display font-bold outline-none focus:border-terracotta focus:ring-2 focus:ring-terracotta/10 transition-all" />
                     </div>
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-warm-500 uppercase tracking-wider block mb-1.5">項目</label>
                     <input type="text" value={newExpense.description} onChange={e => setNewExpense({...newExpense, description: e.target.value})} placeholder="例如：全聯採購..."
-                      className="w-full bg-cream border border-warm-200 rounded-xl p-3 text-warm-800 text-sm outline-none focus:border-terracotta focus:ring-2 focus:ring-terracotta/10 transition-all placeholder:text-warm-300" />
+                      className="w-full bg-cream border border-warm-200 rounded-xl p-3 text-warm-800 text-base outline-none focus:border-terracotta focus:ring-2 focus:ring-terracotta/10 transition-all placeholder:text-warm-300" />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="text-xs font-semibold text-warm-500 uppercase tracking-wider block mb-1.5">誰先付的?</label>
                       <select value={newExpense.payerId} onChange={e => setNewExpense({...newExpense, payerId: e.target.value})}
-                        className="w-full bg-cream border border-warm-200 rounded-xl p-3 text-warm-800 text-sm outline-none focus:border-terracotta transition-all">
+                        className="w-full bg-cream border border-warm-200 rounded-xl p-3 text-warm-800 text-base outline-none focus:border-terracotta transition-all">
                         {roommates.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                       </select>
                     </div>
@@ -622,11 +622,11 @@ const App = () => {
                     </button>
                     <div className="flex gap-3 items-center pr-6">
                       <input value={item.title} onChange={e => updateFixedConfig(item.id, 'title', e.target.value)}
-                        className="bg-transparent text-sm font-semibold text-warm-800 outline-none flex-1 placeholder:text-warm-300" placeholder="費用名稱" />
+                        className="bg-transparent text-base font-semibold text-warm-800 outline-none flex-1 placeholder:text-warm-300" placeholder="費用名稱" />
                       <div className="flex items-center bg-white rounded-lg border border-warm-200 px-2">
                         <span className="text-warm-400 text-sm">$</span>
-                        <input type="number" value={item.amount} onChange={e => updateFixedConfig(item.id, 'amount', e.target.value)}
-                          className="w-20 bg-transparent py-1.5 px-1 text-warm-800 text-sm font-display font-semibold outline-none" />
+                        <input type="number" inputMode="numeric" value={item.amount} onChange={e => updateFixedConfig(item.id, 'amount', e.target.value)}
+                          className="w-24 bg-transparent py-1.5 px-1 text-warm-800 text-base font-display font-semibold outline-none" />
                       </div>
                     </div>
                     <div className="pt-2 border-t border-warm-200/60">
@@ -650,7 +650,7 @@ const App = () => {
                     <div key={r.id} className="flex gap-3 items-center">
                       <div className={`w-3 h-8 rounded-full ${theme.dot}`} />
                       <input value={r.name} onChange={e => { const newR = [...roommates]; newR[idx].name = e.target.value; updateSettingsInDb(newR, null); }}
-                        className="flex-1 bg-cream border border-warm-200 rounded-xl px-3 py-2.5 text-warm-800 text-sm font-medium outline-none focus:border-terracotta transition-all" />
+                        className="flex-1 bg-cream border border-warm-200 rounded-xl px-3 py-2.5 text-warm-800 text-base font-medium outline-none focus:border-terracotta transition-all" />
                     </div>
                   );
                 })}
@@ -668,8 +668,8 @@ const App = () => {
       </main>
 
       {/* Bottom nav - mobile only, desktop uses sidebar-like top nav */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-warm-200 sm:hidden z-30">
-        <div className="flex justify-around px-2 pb-safe">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-warm-200 sm:hidden z-30 pb-safe">
+        <div className="flex justify-around px-2">
           <TabButton id="dashboard" label="總覽" icon={Activity} />
           <TabButton id="expenses" label="紀錄" icon={DollarSign} />
           <TabButton id="settings" label="設定" icon={Settings} />
