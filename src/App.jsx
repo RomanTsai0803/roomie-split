@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Plus, Trash2, DollarSign, Calculator, CheckCircle, Activity, Settings, AlertTriangle, X, History, FileText, Cloud, CloudOff, CheckSquare, Square, ArrowRight, Home, BarChart3 } from 'lucide-react';
 
 // --- FIREBASE 設定區 ---
@@ -46,6 +46,168 @@ const INITIAL_FIXED_CONFIG = [
   { id: 'f4', title: '大樓管理費', amount: 737, forWho: ['1', '2', '3'] },
 ];
 
+const getTheme = (id) => MEMBER_THEMES[id] || MEMBER_THEMES['1'];
+
+const Card = ({ children, className = '' }) => (
+  <div className={`bg-white rounded-2xl p-5 shadow-[var(--card-shadow)] border border-warm-100 ${className}`}>
+    {children}
+  </div>
+);
+
+const AmountWithDetail = ({ amount, displayAmount, credits, details, colorClass, title, isOpen, onOpen, onClose }) => {
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const dragRef = useRef(null);
+  const shown = displayAmount !== undefined ? displayAmount : amount;
+  const isNegative = shown < 0;
+
+  useEffect(() => {
+    if (isOpen) setPos({ x: 0, y: 0 });
+  }, [isOpen]);
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!dragRef.current) return;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      setPos({
+        x: dragRef.current.origX + clientX - dragRef.current.startX,
+        y: dragRef.current.origY + clientY - dragRef.current.startY,
+      });
+    };
+    const onUp = () => { dragRef.current = null; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    };
+  }, []);
+
+  const startDrag = (e) => {
+    e.preventDefault();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    dragRef.current = { startX: clientX, startY: clientY, origX: pos.x, origY: pos.y };
+  };
+
+  const displayClass = isNegative ? 'text-sage font-semibold' : colorClass;
+  const displayStr = `${isNegative ? '-' : ''}$${Math.abs(shown).toLocaleString()}`;
+
+  if (!details?.length) return <div className={`text-sm font-medium font-display text-center ${displayClass}`}>{displayStr}</div>;
+  return (
+    <>
+      <div onClick={onOpen} className={`text-sm font-medium font-display text-center border-b border-dashed border-warm-300 cursor-pointer hover:text-terracotta transition-colors ${displayClass}`}>
+        {displayStr}
+      </div>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-warm-900/30 backdrop-blur-sm" onClick={onClose}>
+          <div
+            className="w-full max-w-sm"
+            style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}
+            onClick={e => e.stopPropagation()}
+          >
+          <div className="bg-white rounded-2xl overflow-hidden shadow-2xl animate-fade-in-up">
+            <div
+              className="bg-cream px-5 py-4 flex justify-between items-center border-b border-warm-200 cursor-grab active:cursor-grabbing select-none"
+              onMouseDown={startDrag}
+              onTouchStart={startDrag}
+            >
+              <h4 className="text-sm font-bold text-warm-800 flex items-center gap-2"><FileText size={15} className="text-terracotta" />{title}</h4>
+              <button onClick={onClose} className="text-warm-400 hover:text-warm-600 transition-colors"><X size={18} /></button>
+            </div>
+            <div className="p-5 max-h-72 overflow-y-auto">
+              {details.length > 0 && (
+                <>
+                  <div className="text-[11px] text-warm-400 font-semibold uppercase tracking-wider mb-2">應付明細</div>
+                  {details.map((d, i) => (
+                    <div key={i} className="flex justify-between py-2.5 border-b border-warm-100 last:border-0">
+                      <span className="text-sm text-warm-600">{d.desc}</span>
+                      <span className="text-sm font-display font-semibold text-warm-800">${d.amt.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+              {credits?.length > 0 && (
+                <>
+                  <div className={`text-[11px] text-sage font-semibold uppercase tracking-wider mb-2 ${details.length > 0 ? 'mt-4' : ''}`}>墊付明細</div>
+                  {credits.map((c, i) => (
+                    <div key={i} className="flex justify-between py-2.5 border-b border-sage/20 last:border-0">
+                      <span className="text-sm text-warm-600">{c.desc}</span>
+                      <span className="text-sm font-display font-semibold text-sage">-${c.amt.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+              <div className="mt-4 pt-4 border-t-2 border-warm-200 flex justify-between items-center">
+                <span className="text-xs font-semibold text-warm-400 uppercase tracking-wider">淨額</span>
+                <span className={`font-display text-lg font-bold ${(displayAmount !== undefined ? displayAmount : amount) < 0 ? 'text-sage' : 'text-terracotta'}`}>
+                  {(displayAmount !== undefined ? displayAmount : amount) < 0 ? '-' : ''}${Math.abs(displayAmount !== undefined ? displayAmount : amount).toLocaleString()}
+                </span>
+              </div>
+            </div>
+          </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+const TabButton = ({ id, label, icon: Icon, activeTab, setActiveTab }) => (
+  <button onClick={() => setActiveTab(id)}
+    className={`flex flex-col items-center justify-center py-3 px-4 relative transition-all ${
+      activeTab === id ? 'text-terracotta' : 'text-warm-400 hover:text-warm-600'
+    }`}>
+    {activeTab === id && <div className="absolute top-0 w-8 h-[3px] bg-terracotta rounded-b-full" />}
+    <Icon size={22} className="mb-1" strokeWidth={activeTab === id ? 2.5 : 1.8} />
+    <span className="text-[11px] font-semibold tracking-wide">{label}</span>
+  </button>
+);
+
+const MultiSelectUser = ({ selected, onChange, roommates }) => {
+  const toggle = (id) => {
+    if (selected.includes(id)) {
+      if (selected.length === 1) return;
+      onChange(selected.filter(uid => uid !== id));
+    } else {
+      onChange([...selected, id]);
+    }
+  };
+  const selectAll = () => onChange(roommates.map(r => r.id));
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex gap-2 flex-wrap">
+        {roommates.map(r => {
+          const theme = getTheme(r.id);
+          const isSelected = selected.includes(r.id);
+          return (
+            <button key={r.id} type="button" onClick={() => toggle(r.id)}
+              className={`flex-1 py-2.5 px-2 rounded-xl text-xs font-semibold transition-all border-2 ${
+                isSelected
+                  ? `${theme.bg} text-white border-transparent shadow-md`
+                  : 'bg-warm-50 text-warm-500 border-warm-200 hover:border-warm-300'
+              }`}>
+              <div className="flex items-center justify-center gap-1.5">
+                {isSelected ? <CheckSquare size={13} /> : <Square size={13} />}
+                {r.name}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {selected.length < roommates.length && (
+        <button type="button" onClick={selectAll} className="text-[11px] text-terracotta font-medium self-end hover:underline">
+          選取全體
+        </button>
+      )}
+    </div>
+  );
+};
+
 const App = () => {
   const [expenses, setExpenses] = useState([]);
   const [roommates, setRoommates] = useState(INITIAL_ROOMMATES);
@@ -58,6 +220,7 @@ const App = () => {
     description: '', amount: '', payerId: '1', forWho: ['1', '2', '3'], date: new Date().toISOString().split('T')[0]
   });
   const [batchPayerId, setBatchPayerId] = useState('1');
+  const [activeDetail, setActiveDetail] = useState(null);
 
   // --- 資料同步 ---
   useEffect(() => {
@@ -141,7 +304,7 @@ const App = () => {
 
     const statusMap = {};
     roommates.forEach(r => {
-      statusMap[r.id] = { ...r, paid: 0, liability: 0, balance: 0, fixedLiability: 0, variableLiability: 0, breakdown: { fixed: [], variable: [] } };
+      statusMap[r.id] = { ...r, paid: 0, paidVariable: 0, liability: 0, balance: 0, fixedLiability: 0, variableLiability: 0, breakdown: { fixed: [], variable: [], variableCredit: [] } };
     });
 
     const getBeneficiaries = (forWho, allRoommates) => {
@@ -152,7 +315,10 @@ const App = () => {
 
     monthlyExpenses.forEach(item => {
       const amount = Math.round(parseFloat(item.amount));
-      if (statusMap[item.payerId]) statusMap[item.payerId].paid += amount;
+      if (statusMap[item.payerId]) {
+        statusMap[item.payerId].paid += amount;
+        if (!item.configId) statusMap[item.payerId].paidVariable += amount;
+      }
 
       const beneficiaries = getBeneficiaries(item.forWho, roommates);
       const count = beneficiaries.length;
@@ -187,6 +353,22 @@ const App = () => {
             statusMap[r.id].breakdown.variable.push(detail);
           }
         });
+      }
+    });
+
+    // 計算每個人的變動墊付明細（幫別人付的部分）
+    monthlyExpenses.forEach(item => {
+      if (item.configId || !statusMap[item.payerId]) return;
+      const amount = Math.round(parseFloat(item.amount));
+      const beneficiaries = getBeneficiaries(item.forWho, roommates);
+      const count = beneficiaries.length;
+      if (count === 0) return;
+      const splitAmount = Math.ceil(amount / count);
+      const isPayerInvolved = beneficiaries.some(b => b.id === item.payerId);
+      const payerOwnLiability = isPayerInvolved ? amount - (splitAmount * (count - 1)) : 0;
+      const creditAmt = amount - payerOwnLiability;
+      if (creditAmt > 0) {
+        statusMap[item.payerId].breakdown.variableCredit.push({ desc: item.description, amt: creditAmt });
       }
     });
 
@@ -266,108 +448,13 @@ const App = () => {
   const addFixedConfig = () => { const newItem = { id: `f${Date.now()}`, title: '新費用', amount: 0, forWho: roommates.map(r=>r.id) }; setFixedConfig([...fixedConfig, newItem]); updateSettingsInDb(null, [...fixedConfig, newItem]); };
   const removeFixedConfig = (id) => { if (window.confirm('刪除設定？')) { const next = fixedConfig.filter(c => c.id !== id); setFixedConfig(next); updateSettingsInDb(null, next); }};
 
-  const getTheme = (id) => MEMBER_THEMES[id] || MEMBER_THEMES['1'];
-
-  // --- UI Components ---
-  const MultiSelectUser = ({ selected, onChange }) => {
-    const toggle = (id) => {
-      if (selected.includes(id)) {
-        if (selected.length === 1) return;
-        onChange(selected.filter(uid => uid !== id));
-      } else {
-        onChange([...selected, id]);
-      }
-    };
-    const selectAll = () => onChange(roommates.map(r => r.id));
-    return (
-      <div className="flex flex-col gap-2">
-        <div className="flex gap-2 flex-wrap">
-          {roommates.map(r => {
-            const theme = getTheme(r.id);
-            const isSelected = selected.includes(r.id);
-            return (
-              <button key={r.id} type="button" onClick={() => toggle(r.id)}
-                className={`flex-1 py-2.5 px-2 rounded-xl text-xs font-semibold transition-all border-2 ${
-                  isSelected
-                    ? `${theme.bg} text-white border-transparent shadow-md`
-                    : 'bg-warm-50 text-warm-500 border-warm-200 hover:border-warm-300'
-                }`}>
-                <div className="flex items-center justify-center gap-1.5">
-                  {isSelected ? <CheckSquare size={13} /> : <Square size={13} />}
-                  {r.name}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-        {selected.length < roommates.length && (
-          <button type="button" onClick={selectAll} className="text-[11px] text-terracotta font-medium self-end hover:underline">
-            選取全體
-          </button>
-        )}
-      </div>
-    );
-  };
-
-  const AmountWithDetail = ({ amount, details, colorClass, title }) => {
-    const [showDetail, setShowDetail] = useState(false);
-    if (!details?.length) return <div className={`text-sm font-medium font-display text-center ${colorClass}`}>${amount.toLocaleString()}</div>;
-    return (
-      <>
-        <div onClick={() => setShowDetail(true)} className={`text-sm font-medium font-display text-center border-b border-dashed border-warm-300 cursor-pointer hover:text-terracotta transition-colors ${colorClass}`}>
-          ${amount.toLocaleString()}
-        </div>
-        {showDetail && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-warm-900/30 backdrop-blur-sm" onClick={() => setShowDetail(false)}>
-            <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-fade-in-up" onClick={e => e.stopPropagation()}>
-              <div className="bg-cream px-5 py-4 flex justify-between items-center border-b border-warm-200">
-                <h4 className="text-sm font-bold text-warm-800 flex items-center gap-2"><FileText size={15} className="text-terracotta" />{title}</h4>
-                <button onClick={() => setShowDetail(false)} className="text-warm-400 hover:text-warm-600 transition-colors"><X size={18} /></button>
-              </div>
-              <div className="p-5 max-h-60 overflow-y-auto">
-                {details.map((d, i) => (
-                  <div key={i} className="flex justify-between py-3 border-b border-warm-100 last:border-0">
-                    <span className="text-sm text-warm-600">{d.desc}</span>
-                    <span className="text-sm font-display font-semibold text-warm-800">${d.amt.toLocaleString()}</span>
-                  </div>
-                ))}
-                <div className="mt-4 pt-4 border-t-2 border-warm-200 flex justify-between items-center">
-                  <span className="text-xs font-semibold text-warm-400 uppercase tracking-wider">Total</span>
-                  <span className="font-display text-lg font-bold text-terracotta">${amount.toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </>
-    );
-  };
-
-  const TabButton = ({ id, label, icon: Icon }) => (
-    <button onClick={() => setActiveTab(id)}
-      className={`flex flex-col items-center justify-center py-3 px-4 relative transition-all ${
-        activeTab === id ? 'text-terracotta' : 'text-warm-400 hover:text-warm-600'
-      }`}>
-      {activeTab === id && <div className="absolute top-0 w-8 h-[3px] bg-terracotta rounded-b-full" />}
-      <Icon size={22} className="mb-1" strokeWidth={activeTab === id ? 2.5 : 1.8} />
-      <span className="text-[11px] font-semibold tracking-wide">{label}</span>
-    </button>
-  );
-
-  // --- Card wrapper ---
-  const Card = ({ children, className = '' }) => (
-    <div className={`bg-white rounded-2xl p-5 shadow-[var(--card-shadow)] border border-warm-100 ${className}`}>
-      {children}
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-cream">
       {/* Desktop sidebar / Mobile header */}
       <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-warm-200">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
+            <button onClick={() => setActiveTab('dashboard')} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
               <div className="w-9 h-9 rounded-xl bg-terracotta flex items-center justify-center">
                 <Home size={18} className="text-white" />
               </div>
@@ -380,7 +467,7 @@ const App = () => {
                   }
                 </div>
               </div>
-            </div>
+            </button>
             <div className="flex items-center gap-2 bg-cream rounded-xl px-3 py-2 border border-warm-200">
               <History size={14} className="text-warm-400" />
               <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}
@@ -466,11 +553,30 @@ const App = () => {
                           details={p.breakdown.fixed}
                           title={`${p.name} 固定費用`}
                           colorClass={stats.hasImportedFixed ? 'text-warm-600' : 'text-amber-500 italic'}
+                          isOpen={activeDetail === `${p.id}-fixed`}
+                          onOpen={() => setActiveDetail(`${p.id}-fixed`)}
+                          onClose={() => setActiveDetail(null)}
                         />
-                        <AmountWithDetail amount={p.variableLiability} details={p.breakdown.variable} title={`${p.name} 變動費用`} colorClass="text-warm-600" />
-                        <div className="text-base font-bold font-display text-terracotta text-center">
-                          ${((stats.hasImportedFixed ? p.fixedLiability : stats.projectedFixed[p.id]) + p.variableLiability).toLocaleString()}
-                        </div>
+                        <AmountWithDetail
+                          amount={p.variableLiability}
+                          displayAmount={p.variableLiability - p.paidVariable}
+                          details={p.breakdown.variable}
+                          credits={p.breakdown.variableCredit}
+                          title={`${p.name} 變動費用`}
+                          colorClass="text-warm-600"
+                          isOpen={activeDetail === `${p.id}-variable`}
+                          onOpen={() => setActiveDetail(`${p.id}-variable`)}
+                          onClose={() => setActiveDetail(null)}
+                        />
+                        {(() => {
+                          const fixedPart = stats.hasImportedFixed ? p.fixedLiability : stats.projectedFixed[p.id];
+                          const net = fixedPart + p.variableLiability - p.paidVariable;
+                          return (
+                            <div className={`text-base font-bold font-display text-center ${net < 0 ? 'text-sage' : 'text-terracotta'}`}>
+                              {net < 0 ? '-' : ''}${Math.abs(net).toLocaleString()}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}
@@ -557,7 +663,7 @@ const App = () => {
                     </div>
                     <div>
                       <label className="text-xs font-semibold text-warm-500 uppercase tracking-wider block mb-1.5">分擔對象</label>
-                      <MultiSelectUser selected={Array.isArray(newExpense.forWho) ? newExpense.forWho : [newExpense.forWho]} onChange={val => setNewExpense({...newExpense, forWho: val})} />
+                      <MultiSelectUser selected={Array.isArray(newExpense.forWho) ? newExpense.forWho : [newExpense.forWho]} onChange={val => setNewExpense({...newExpense, forWho: val})} roommates={roommates} />
                     </div>
                   </div>
                 </div>
@@ -631,7 +737,7 @@ const App = () => {
                     </div>
                     <div className="pt-2 border-t border-warm-200/60">
                       <span className="text-[11px] text-warm-400 font-semibold uppercase tracking-wider block mb-1.5">分擔人</span>
-                      <MultiSelectUser selected={Array.isArray(item.forWho) ? item.forWho : [item.forWho]} onChange={val => updateFixedConfig(item.id, 'forWho', val)} />
+                      <MultiSelectUser selected={Array.isArray(item.forWho) ? item.forWho : [item.forWho]} onChange={val => updateFixedConfig(item.id, 'forWho', val)} roommates={roommates} />
                     </div>
                   </div>
                 ))}
@@ -670,18 +776,18 @@ const App = () => {
       {/* Bottom nav - mobile only, desktop uses sidebar-like top nav */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-warm-200 sm:hidden z-30">
         <div className="flex justify-around px-2 pb-safe">
-          <TabButton id="dashboard" label="總覽" icon={Activity} />
-          <TabButton id="expenses" label="紀錄" icon={DollarSign} />
-          <TabButton id="settings" label="設定" icon={Settings} />
+          <TabButton id="dashboard" label="總覽" icon={Activity} activeTab={activeTab} setActiveTab={setActiveTab} />
+          <TabButton id="expenses" label="紀錄" icon={DollarSign} activeTab={activeTab} setActiveTab={setActiveTab} />
+          <TabButton id="settings" label="設定" icon={Settings} activeTab={activeTab} setActiveTab={setActiveTab} />
         </div>
       </nav>
 
       {/* Desktop nav */}
       <nav className="hidden sm:block fixed bottom-6 left-1/2 -translate-x-1/2 z-30">
         <div className="flex gap-1 bg-white rounded-2xl shadow-lg shadow-warm-800/10 border border-warm-200 px-2 py-1">
-          <TabButton id="dashboard" label="總覽" icon={Activity} />
-          <TabButton id="expenses" label="紀錄" icon={DollarSign} />
-          <TabButton id="settings" label="設定" icon={Settings} />
+          <TabButton id="dashboard" label="總覽" icon={Activity} activeTab={activeTab} setActiveTab={setActiveTab} />
+          <TabButton id="expenses" label="紀錄" icon={DollarSign} activeTab={activeTab} setActiveTab={setActiveTab} />
+          <TabButton id="settings" label="設定" icon={Settings} activeTab={activeTab} setActiveTab={setActiveTab} />
         </div>
       </nav>
     </div>
