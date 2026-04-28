@@ -2,8 +2,8 @@ name: Monthly LINE Reminder
 
 on:
   schedule:
-    # 每月 28-31 號，UTC 03:15 = 台灣時間 11:15
-    - cron: "15 3 28-31 * *"
+    # 每月 28-31 號，UTC 15:46 = 台灣時間 23:46
+    - cron: "45 15 28-31 * *"
   # 允許手動觸發（測試用）
   workflow_dispatch:
 
