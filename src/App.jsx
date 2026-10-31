@@ -43,8 +43,8 @@ const INITIAL_ROOMMATES = [
 const INITIAL_FIXED_CONFIG = [
   { id: 'f1', title: '劉傑房租', amount: 12600, forWho: ['1'] },
   { id: 'f2', title: 'Aaron房租', amount: 10200, forWho: ['2'] },
-  { id: 'f3', title: 'Roman房租', amount: 9600, forWho: ['3'] },
-  { id: 'f4', title: '大樓管理費', amount: 737, forWho: ['1', '2', '3'] },
+  { id: 'f3', title: 'Roman房租', amount: 9200, forWho: ['3'] },
+  { id: 'f4', title: '大樓管理費', amount: 2210, forWho: ['1', '2', '3'] },
 ];
 
 const getTheme = (id) => MEMBER_THEMES[id] || MEMBER_THEMES['1'];
@@ -209,7 +209,7 @@ const MultiSelectUser = ({ selected, onChange, roommates }) => {
   );
 };
 
-const App = () => {
+const MainApp = ({ onLogout }) => {
   const [expenses, setExpenses] = useState([]);
   const [roommates, setRoommates] = useState(INITIAL_ROOMMATES);
   const [fixedConfig, setFixedConfig] = useState(INITIAL_FIXED_CONFIG);
@@ -856,6 +856,7 @@ const App = () => {
             </Card>
 
             <Card className="border-red-100">
+              <button onClick={() => { if (window.confirm('確定登出？下次需重新輸入密碼')) onLogout(); }} className="w-full mb-3 py-3 bg-white text-warm-500 border border-warm-200 rounded-xl text-sm font-semibold">登出</button>
               <h3 className="font-bold text-warm-800 text-sm mb-4">資料管理 ({selectedMonth})</h3>
               <button onClick={deleteCurrentMonthData} className="w-full flex justify-center items-center gap-2 text-red-500 bg-red-50 border border-red-200 py-3 rounded-xl text-sm font-semibold hover:bg-red-100 transition-colors">
                 <Trash2 size={16} /> 刪除本月所有資料
@@ -914,6 +915,54 @@ const App = () => {
       </nav>
     </div>
   );
+};
+
+// --- 密碼鎖（僅前端鎖，見 PR 說明）---
+const PASS_SALT = 'roomie-split:v1:';
+const PASS_HASH = 'cdd8fd9bd58286d524e7fc167a9904d847b1aa3fbd64fb36534ad5c8a3da7046';
+const UNLOCK_KEY = 'roomie_unlocked_until';
+const UNLOCK_DAYS = 30;
+const sha256Hex = async (text) => {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+};
+const isUnlockedOnDevice = () => { try { return Number(localStorage.getItem(UNLOCK_KEY)) > Date.now(); } catch { return false; } };
+
+const LockScreen = ({ onUnlock }) => {
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const [checking, setChecking] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (checking) return;
+    setChecking(true);
+    const ok = (await sha256Hex(PASS_SALT + code)) === PASS_HASH;
+    setChecking(false);
+    if (ok) {
+      try { localStorage.setItem(UNLOCK_KEY, String(Date.now() + UNLOCK_DAYS * 86400000)); } catch {}
+      onUnlock();
+    } else { setError('密碼錯誤，請再試一次'); setCode(''); }
+  };
+  return (
+    <div className="min-h-screen bg-cream flex items-center justify-center p-6">
+      <form onSubmit={submit} className="w-full max-w-xs bg-white rounded-2xl p-6 shadow-[var(--card-shadow)] border border-warm-100 text-center space-y-4">
+        <div className="w-12 h-12 mx-auto rounded-xl bg-terracotta flex items-center justify-center"><Home size={22} className="text-white" /></div>
+        <h1 className="text-lg font-bold text-warm-800">龍品小窩</h1>
+        <p className="text-sm text-warm-400">請輸入 4 位數密碼</p>
+        <input type="password" inputMode="numeric" pattern="[0-9]*" autoComplete="off" maxLength={4} autoFocus
+          value={code} onChange={e => { setCode(e.target.value.replace(/\D/g, '').slice(0, 4)); setError(''); }}
+          className="w-full text-center tracking-[0.5em] bg-cream border border-warm-200 rounded-xl px-3 py-3 text-base font-display font-semibold text-warm-800 outline-none focus:border-terracotta" />
+        {error && <p className="text-sm text-red-500">{error}</p>}
+        <button type="submit" disabled={code.length !== 4 || checking} className="w-full py-3 bg-terracotta text-white text-base font-semibold rounded-xl disabled:bg-warm-200 disabled:text-warm-400">解鎖</button>
+      </form>
+    </div>
+  );
+};
+
+const App = () => {
+  const [unlocked, setUnlocked] = useState(isUnlockedOnDevice);
+  if (!unlocked) return <LockScreen onUnlock={() => setUnlocked(true)} />;
+  return <MainApp onLogout={() => { try { localStorage.removeItem(UNLOCK_KEY); } catch {} setUnlocked(false); }} />;
 };
 
 export default App;
