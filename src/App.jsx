@@ -19,7 +19,8 @@ const firebaseConfig = {
 };
 
 let db;
-const isFirebaseReady = Object.keys(firebaseConfig).length > 0;
+// 本機測試可設 VITE_LOCAL_ONLY=1，完全不連線 Firestore（只用 localStorage）
+const isFirebaseReady = import.meta.env.VITE_LOCAL_ONLY !== '1' && Object.keys(firebaseConfig).length > 0;
 if (isFirebaseReady) {
   const app = initializeApp(firebaseConfig);
   db = getFirestore(app);
@@ -218,11 +219,11 @@ const App = () => {
   const [savingConfig, setSavingConfig] = useState(false);
   const [configHistory, setConfigHistory] = useState([]);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().toLocaleDateString('sv-SE').slice(0, 7));
   const [dbStatus, setDbStatus] = useState(isFirebaseReady ? 'connecting' : 'local');
 
   const [newExpense, setNewExpense] = useState({
-    description: '', amount: '', payerId: '1', forWho: ['1', '2', '3'], date: new Date().toISOString().split('T')[0]
+    description: '', amount: '', payerId: '1', forWho: ['1', '2', '3'], date: new Date().toLocaleDateString('sv-SE')
   });
   const [batchPayerId, setBatchPayerId] = useState('1');
   const [activeDetail, setActiveDetail] = useState(null);
@@ -393,7 +394,7 @@ const App = () => {
       const count = beneficiaries.length;
       if(count > 0) {
          const split = Math.ceil(amount / count);
-         beneficiaries.forEach(r => projectedFixed[r.id] += split);
+         beneficiaries.forEach((r, idx) => projectedFixed[r.id] += idx === 0 ? amount - split * (count - 1) : split);
       }
     });
 
@@ -461,6 +462,8 @@ const App = () => {
     });
     return changes;
   };
+  const configChangeCount = computeConfigChanges().length;
+  const configDirty = configChangeCount > 0;
   const hasThisMonthFixed = (configId) => expenses.some(e => e.configId === configId && e.date.startsWith(selectedMonth));
   const requestSaveConfig = () => {
     const changes = computeConfigChanges();
@@ -543,7 +546,7 @@ const App = () => {
       </header>
 
       {/* FAB */}
-      {activeTab !== 'add' && (
+      {activeTab !== 'add' && activeTab !== 'settings' && (
         <button onClick={() => setActiveTab('add')}
           className="fixed bottom-24 right-4 sm:bottom-8 sm:right-8 lg:right-[calc(50%-600px+2rem)] bg-terracotta text-white p-4 rounded-2xl shadow-lg shadow-terracotta/30 hover:shadow-xl hover:shadow-terracotta/40 hover:scale-105 active:scale-95 transition-all z-40">
           <Plus size={24} strokeWidth={2.5} />
@@ -779,7 +782,7 @@ const App = () => {
         )}
 
         {activeTab === 'settings' && (
-          <div className="max-w-2xl mx-auto space-y-5 animate-fade-in-up">
+          <div className="max-w-2xl mx-auto space-y-5 animate-fade-in-up pb-20">
             <Card>
               <h3 className="font-bold text-warm-800 text-sm mb-4 flex items-center gap-2">
                 <Settings size={16} className="text-terracotta" />
@@ -796,7 +799,7 @@ const App = () => {
                     </button>
                     <div className="flex gap-3 items-center pr-6">
                       <input value={item.title} onChange={e => updateFixedConfig(item.id, 'title', e.target.value)}
-                        className="bg-transparent text-base font-semibold text-warm-800 outline-none flex-1 placeholder:text-warm-300" placeholder="費用名稱" />
+                        className="bg-transparent text-base font-semibold text-warm-800 outline-none flex-1 min-w-0 placeholder:text-warm-300" placeholder="費用名稱" />
                       <div className="flex items-center bg-white rounded-lg border border-warm-200 px-2">
                         <span className="text-warm-400 text-sm">$</span>
                         <input type="number" inputMode="numeric" value={item.amount} onChange={e => updateFixedConfig(item.id, 'amount', e.target.value)}
@@ -812,12 +815,7 @@ const App = () => {
                 <button onClick={addFixedConfig} className="w-full py-3 bg-white text-warm-400 text-sm font-semibold rounded-xl border-2 border-dashed border-warm-200 hover:border-terracotta hover:text-terracotta transition-all">
                   + 新增項目
                 </button>
-                {configDraft && (
-                  <div className="flex gap-2 pt-1">
-                    <button onClick={discardConfigDraft} className="flex-1 py-3 bg-white text-warm-500 text-sm font-semibold rounded-xl border border-warm-200">取消修改</button>
-                    <button onClick={requestSaveConfig} className="flex-1 py-3 bg-terracotta text-white text-sm font-semibold rounded-xl">儲存修改</button>
-                  </div>
-                )}
+                <p className="text-[11px] text-warm-400 text-center">{configDirty ? '尚未儲存，按下方「儲存修改」並確認後才會生效' : '修改名稱、金額或分擔人後，按下方「儲存修改」'}</p>
               </div>
               )}
             </Card>
@@ -866,6 +864,15 @@ const App = () => {
           </div>
         )}
       </main>
+
+      {activeTab === 'settings' && configLoaded && !pendingChanges && (
+        <div className="fixed left-0 right-0 z-40 px-4 sm:bottom-24 bottom-[calc(4.5rem+env(safe-area-inset-bottom))]">
+          <div className="max-w-2xl mx-auto flex gap-2 bg-white/95 backdrop-blur-xl border border-warm-200 rounded-2xl shadow-lg p-2">
+            <button onClick={discardConfigDraft} disabled={!configDirty} className="flex-1 py-3 text-warm-500 text-base font-semibold rounded-xl border border-warm-200 disabled:opacity-40">取消</button>
+            <button onClick={requestSaveConfig} disabled={!configDirty} className="flex-[2] py-3 bg-terracotta text-white text-base font-semibold rounded-xl disabled:bg-warm-200 disabled:text-warm-400">{configDirty ? `儲存修改（${configChangeCount}）` : '儲存修改（無變更）'}</button>
+          </div>
+        </div>
+      )}
 
       {pendingChanges && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-warm-900/30 backdrop-blur-sm" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
