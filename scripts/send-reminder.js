@@ -54,9 +54,11 @@ function calculateLiabilities(expenses, roommates, fixedConfig, yearMonth) {
 
     const splitAmount = Math.ceil(amount / count);
 
-    beneficiaries.forEach((r, idx) => {
+    // 與 App.jsx 一致：尾差由付款人（若在分擔人中）承擔，否則由第一位分擔人承擔
+    const remainderId = beneficiaries.some((b) => b.id === item.payerId) ? item.payerId : beneficiaries[0].id;
+    beneficiaries.forEach((r) => {
       let liability;
-      if (idx === 0) {
+      if (r.id === remainderId) {
         liability = amount - splitAmount * (count - 1);
       } else {
         liability = splitAmount;
@@ -82,8 +84,8 @@ function calculateLiabilities(expenses, roommates, fixedConfig, yearMonth) {
       if (count === 0) return;
 
       const split = Math.ceil(amount / count);
-      beneficiaries.forEach((r) => {
-        if (statusMap[r.id]) statusMap[r.id].fixedLiability += split;
+      beneficiaries.forEach((r, idx) => {
+        if (statusMap[r.id]) statusMap[r.id].fixedLiability += idx === 0 ? amount - split * (count - 1) : split;
       });
     });
   }
