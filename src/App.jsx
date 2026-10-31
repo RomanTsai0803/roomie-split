@@ -5,7 +5,7 @@ import { Plus, Trash2, DollarSign, Calculator, CheckCircle, Activity, Settings, 
 import { initializeApp } from "firebase/app";
 import {
   getFirestore, collection, addDoc, deleteDoc, doc, updateDoc,
-  onSnapshot, query, orderBy, writeBatch, setDoc
+  onSnapshot, query, orderBy, writeBatch, setDoc, limit, serverTimestamp
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -212,6 +212,11 @@ const App = () => {
   const [expenses, setExpenses] = useState([]);
   const [roommates, setRoommates] = useState(INITIAL_ROOMMATES);
   const [fixedConfig, setFixedConfig] = useState(INITIAL_FIXED_CONFIG);
+  const [configLoaded, setConfigLoaded] = useState(!isFirebaseReady);
+  const [configDraft, setConfigDraft] = useState(null); // 設定頁本地草稿；null = 無未儲存修改
+  const [pendingChanges, setPendingChanges] = useState(null); // 二次確認視窗內容
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [configHistory, setConfigHistory] = useState([]);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [dbStatus, setDbStatus] = useState(isFirebaseReady ? 'connecting' : 'local');
@@ -246,11 +251,19 @@ const App = () => {
         const data = docSnap.data();
         if (data.roommates) setRoommates(data.roommates);
         if (data.fixedConfig) setFixedConfig(data.fixedConfig);
-      } else {
+        setConfigLoaded(true);
+      } else if (!docSnap.metadata.fromCache) {
+        // 只有伺服器確認文件真的不存在時才寫入預設值，避免離線快取時用預設值覆蓋既有資料
+        setConfigLoaded(true);
         setDoc(doc(db, "config", "main"), { roommates: INITIAL_ROOMMATES, fixedConfig: INITIAL_FIXED_CONFIG });
       }
     });
-    return () => { unsubExpenses(); unsubSettings(); };
+    const unsubHistory = onSnapshot(
+      query(collection(db, "config_history"), orderBy("at", "desc"), limit(20)),
+      (snap) => setConfigHistory(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => console.warn('config_history', err)
+    );
+    return () => { unsubExpenses(); unsubSettings(); unsubHistory(); };
   }, []);
 
   useEffect(() => {
@@ -425,28 +438,80 @@ const App = () => {
   const deleteExpense = async (id) => { if (window.confirm('刪除此筆？')) await deleteExpenseFromDb(id); };
   const deleteCurrentMonthData = async () => { if (window.confirm(`確定清空 ${selectedMonth} 所有資料？`)) { const ids = expenses.filter(e => e.date.startsWith(selectedMonth)).map(e => e.id); await batchOperationToDb(null, ids); }};
 
+  // --- 設定頁：本地草稿 + 二次確認 ---
+  const draftConfig = configDraft || fixedConfig;
   const updateFixedConfig = (id, field, value) => {
-    const nextConfig = fixedConfig.map(item => item.id === id ? { ...item, [field]: value } : item);
-    setFixedConfig(nextConfig);
-    updateSettingsInDb(null, nextConfig);
-    const targetExpense = expenses.find(e => e.configId === id && e.date.startsWith(selectedMonth));
-    if (targetExpense) {
-       const updateData = {};
-       if (field === 'title') updateData.description = `${value} (固定)`;
-       if (field === 'amount') updateData.amount = Math.round(parseFloat(value) || 0);
-       if (field === 'forWho') updateData.forWho = value;
-       if (Object.keys(updateData).length > 0) {
-          if (isFirebaseReady) {
-             updateDoc(doc(db, "expenses", targetExpense.id), updateData);
-          } else {
-             setExpenses(prev => prev.map(e => e.id === targetExpense.id ? { ...e, ...updateData } : e));
-          }
-       }
+    setConfigDraft(draftConfig.map(item => item.id === id ? { ...item, [field]: value } : item));
+  };
+  const fmtForWho = (v) => (Array.isArray(v) ? v : [v]).map(id => roommates.find(r => r.id === id)?.name || id).join('、');
+  const fieldLabel = { title: '名稱', amount: '金額', forWho: '分擔人' };
+  const computeConfigChanges = () => {
+    if (!configDraft) return [];
+    const changes = [];
+    configDraft.forEach(d => {
+      const o = fixedConfig.find(c => c.id === d.id);
+      if (!o) return;
+      const norm = { title: (x) => String(x ?? '').trim(), amount: (x) => Math.round(parseFloat(x) || 0), forWho: (x) => (Array.isArray(x) ? x : [x]).slice().sort().join(',') };
+      ['title', 'amount', 'forWho'].forEach(f => {
+        if (norm[f](o[f]) !== norm[f](d[f])) {
+          changes.push({ configId: d.id, title: o.title, field: f,
+            old: f === 'amount' ? norm.amount(o[f]) : o[f], new: f === 'amount' ? norm.amount(d[f]) : (f === 'title' ? String(d[f]).trim() : d[f]) });
+        }
+      });
+    });
+    return changes;
+  };
+  const hasThisMonthFixed = (configId) => expenses.some(e => e.configId === configId && e.date.startsWith(selectedMonth));
+  const requestSaveConfig = () => {
+    const changes = computeConfigChanges();
+    if (changes.length === 0) { setConfigDraft(null); return; }
+    setPendingChanges(changes);
+  };
+  const discardConfigDraft = () => { setConfigDraft(null); setPendingChanges(null); };
+  const confirmSaveConfig = async () => {
+    if (!pendingChanges || savingConfig) return;
+    setSavingConfig(true);
+    try {
+      const changedIds = new Set(pendingChanges.map(c => c.configId));
+      const nextConfig = fixedConfig.map(c => {
+        if (!changedIds.has(c.id)) return c;
+        const d = configDraft.find(x => x.id === c.id);
+        return { ...c, title: String(d.title).trim(), amount: Math.round(parseFloat(d.amount) || 0), forWho: d.forWho };
+      });
+      const ua = (navigator.userAgent.match(/(iPhone|iPad|Android|Macintosh|Windows)/)?.[1] || 'unknown') + ' ' + (navigator.userAgent.match(/(CriOS|FxiOS|Edg|Chrome|Safari)\/[\d.]+/)?.[0] || '');
+      if (isFirebaseReady) {
+        const batch = writeBatch(db);
+        batch.update(doc(db, "config", "main"), { fixedConfig: nextConfig });
+        changedIds.forEach(id => {
+          const cfg = nextConfig.find(c => c.id === id);
+          const target = expenses.find(e => e.configId === id && e.date.startsWith(selectedMonth));
+          if (target) batch.update(doc(db, "expenses", target.id), { description: `${cfg.title} (固定)`, amount: cfg.amount, forWho: cfg.forWho });
+        });
+        pendingChanges.forEach(c => batch.set(doc(collection(db, "config_history")), {
+          at: serverTimestamp(), configId: c.configId, title: c.title, field: c.field, old: c.old, new: c.new, userAgent: ua.trim()
+        }));
+        await batch.commit();
+      } else {
+        setExpenses(prev => prev.map(e => {
+          if (!e.configId || !changedIds.has(e.configId) || !e.date.startsWith(selectedMonth)) return e;
+          const cfg = nextConfig.find(c => c.id === e.configId);
+          return { ...e, description: `${cfg.title} (固定)`, amount: cfg.amount, forWho: cfg.forWho };
+        }));
+      }
+      setFixedConfig(nextConfig);
+      setConfigDraft(null);
+      setPendingChanges(null);
+    } catch (err) {
+      alert('儲存失敗，未修改任何資料：' + err.message);
+    } finally {
+      setSavingConfig(false);
     }
   };
+  const fmtHistoryVal = (field, v) => field === 'amount' ? `$${Number(v).toLocaleString()}` : field === 'forWho' ? fmtForWho(v) : String(v);
+  const fmtTaipei = (ts) => ts?.toDate ? ts.toDate().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '處理中…';
 
-  const addFixedConfig = () => { const newItem = { id: `f${Date.now()}`, title: '新費用', amount: 0, forWho: roommates.map(r=>r.id) }; setFixedConfig([...fixedConfig, newItem]); updateSettingsInDb(null, [...fixedConfig, newItem]); };
-  const removeFixedConfig = (id) => { if (window.confirm('刪除設定？')) { const next = fixedConfig.filter(c => c.id !== id); setFixedConfig(next); updateSettingsInDb(null, next); }};
+  const addFixedConfig = () => { if (configDraft) { alert('請先儲存或取消目前的修改'); return; }  const newItem = { id: `f${Date.now()}`, title: '新費用', amount: 0, forWho: roommates.map(r=>r.id) }; setFixedConfig([...fixedConfig, newItem]); updateSettingsInDb(null, [...fixedConfig, newItem]); };
+  const removeFixedConfig = (id) => { if (configDraft) { alert('請先儲存或取消目前的修改'); return; } if (window.confirm('刪除設定？')) { const next = fixedConfig.filter(c => c.id !== id); setFixedConfig(next); updateSettingsInDb(null, next); }};
 
   return (
     <div className="min-h-screen bg-cream">
@@ -720,8 +785,11 @@ const App = () => {
                 <Settings size={16} className="text-terracotta" />
                 固定費用設定
               </h3>
+              {!configLoaded ? (
+                <div className="py-8 text-center text-sm text-warm-400">載入設定中…</div>
+              ) : (
               <div className="space-y-3">
-                {fixedConfig.map(item => (
+                {draftConfig.map(item => (
                   <div key={item.id} className="flex flex-col gap-3 p-4 bg-cream rounded-xl border border-warm-100 relative group">
                     <button onClick={() => removeFixedConfig(item.id)} className="absolute top-3 right-3 text-warm-300 hover:text-red-400 transition-colors">
                       <X size={15} />
@@ -744,7 +812,33 @@ const App = () => {
                 <button onClick={addFixedConfig} className="w-full py-3 bg-white text-warm-400 text-sm font-semibold rounded-xl border-2 border-dashed border-warm-200 hover:border-terracotta hover:text-terracotta transition-all">
                   + 新增項目
                 </button>
+                {configDraft && (
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={discardConfigDraft} className="flex-1 py-3 bg-white text-warm-500 text-sm font-semibold rounded-xl border border-warm-200">取消修改</button>
+                    <button onClick={requestSaveConfig} className="flex-1 py-3 bg-terracotta text-white text-sm font-semibold rounded-xl">儲存修改</button>
+                  </div>
+                )}
               </div>
+              )}
+            </Card>
+
+            <Card>
+              <h3 className="font-bold text-warm-800 text-sm mb-3 flex items-center gap-2">
+                <History size={16} className="text-terracotta" />
+                修改紀錄
+              </h3>
+              {configHistory.length === 0 ? (
+                <div className="text-xs text-warm-400">尚無紀錄</div>
+              ) : (
+                <ul className="space-y-2">
+                  {configHistory.map(h => (
+                    <li key={h.id} className="text-xs text-warm-600 border-b border-warm-100 pb-2">
+                      <div className="text-warm-400">{fmtTaipei(h.at)}（台北）· {h.userAgent}</div>
+                      <div><span className="font-semibold text-warm-800">{h.title}</span> {fieldLabel[h.field] || h.field}：{fmtHistoryVal(h.field, h.old)} → {fmtHistoryVal(h.field, h.new)}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </Card>
 
             <Card>
@@ -772,6 +866,27 @@ const App = () => {
           </div>
         )}
       </main>
+
+      {pendingChanges && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-warm-900/30 backdrop-blur-sm" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] overflow-y-auto p-5">
+            <h3 className="font-bold text-warm-800 text-base mb-3 flex items-center gap-2"><AlertTriangle size={18} className="text-terracotta" />確認修改固定費用？</h3>
+            <ul className="space-y-2 mb-4">
+              {pendingChanges.map((c, i) => (
+                <li key={i} className="p-3 bg-cream rounded-xl text-sm text-warm-700">
+                  <div className="font-semibold text-warm-800">{c.title} · {fieldLabel[c.field]}</div>
+                  <div>{fmtHistoryVal(c.field, c.old)} → <span className="font-bold text-terracotta">{fmtHistoryVal(c.field, c.new)}</span></div>
+                  {hasThisMonthFixed(c.configId) && <div className="text-[11px] text-warm-400 mt-1">{selectedMonth} 已匯入的固定支出也會一起更新</div>}
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-2">
+              <button disabled={savingConfig} onClick={discardConfigDraft} className="flex-1 py-3 bg-white text-warm-500 text-base font-semibold rounded-xl border border-warm-200">取消</button>
+              <button disabled={savingConfig} onClick={confirmSaveConfig} className="flex-1 py-3 bg-terracotta text-white text-base font-semibold rounded-xl disabled:opacity-60">{savingConfig ? '儲存中…' : '確認修改'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bottom nav - mobile only, desktop uses sidebar-like top nav */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-warm-200 sm:hidden z-30 pb-safe">
